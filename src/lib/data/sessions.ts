@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { scoreRolls } from '@/lib/scoring';
 import type { FrameRow, GameRow, SessionRow } from '@/types/db';
 
 export async function listSessions(eventId: string): Promise<SessionRow[]> {
@@ -132,4 +133,60 @@ export async function logScoreEdit(
     old_value: oldValue,
     new_value: newValue,
   });
+}
+
+/**
+ * Persist a game's rolls. Re-scores, upserts every frame, updates
+ * games.total_score + is_complete, and writes an audit row for any frames
+ * whose values actually changed.
+ */
+export async function saveGameRolls(
+  gameId: string,
+  rolls: number[],
+  existingFrames: FrameRow[]
+): Promise<void> {
+  const scored = scoreRolls(rolls);
+  const existingByFrame = new Map(existingFrames.map((f) => [f.frame_number, f]));
+  for (const frame of scored.frames) {
+    const r1 = frame.rolls[0] ?? null;
+    const r2 = frame.rolls[1] ?? null;
+    const r3 = frame.rolls[2] ?? null;
+    const prior = existingByFrame.get(frame.frameNumber);
+    const changed =
+      !prior ||
+      prior.roll_1 !== r1 ||
+      prior.roll_2 !== r2 ||
+      prior.roll_3 !== r3 ||
+      prior.frame_score !== frame.frameScore;
+    if (!changed) continue;
+    await upsertFrame(
+      gameId,
+      frame.frameNumber,
+      { roll_1: r1, roll_2: r2, roll_3: r3 },
+      frame.frameScore
+    );
+    if (prior) {
+      await logScoreEdit(
+        gameId,
+        prior.id,
+        `frame_${frame.frameNumber}`,
+        JSON.stringify({ r1: prior.roll_1, r2: prior.roll_2, r3: prior.roll_3 }),
+        JSON.stringify({ r1, r2, r3 })
+      );
+    }
+  }
+  await updateGameTotals(gameId, scored.total, scored.isComplete);
+}
+
+export async function listAllEventGames(eventId: string): Promise<GameRow[]> {
+  const { data: sessions, error: sErr } = await supabase
+    .from('sessions')
+    .select('id')
+    .eq('event_id', eventId);
+  if (sErr) throw sErr;
+  const ids = (sessions ?? []).map((s) => s.id);
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase.from('games').select('*').in('session_id', ids);
+  if (error) throw error;
+  return (data ?? []) as GameRow[];
 }

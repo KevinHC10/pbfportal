@@ -13,6 +13,7 @@ import {
   ExternalLink,
   UserPlus,
   Calendar,
+  Sigma,
 } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
@@ -49,16 +50,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getEvent } from '@/lib/data/events';
 import {
   addPlayerToEvent,
+  bulkUpdateHandicaps,
   createPlayer,
   listEventPlayers,
   listPlayers,
   removePlayerFromEvent,
-  updateEventPlayerHandicap,
+  updateEventPlayer,
+  updatePlayer,
 } from '@/lib/data/players';
 import { createSession, listSessions } from '@/lib/data/sessions';
+import { computeHandicap } from '@/lib/handicap';
 
 const playerSchema = z.object({
   full_name: z.string().min(2, 'Name is required').max(120),
+  affiliation: z.string().max(80).optional().or(z.literal('')),
   handedness: z.enum(['left', 'right', 'ambi']).optional(),
   home_average: z.coerce.number().min(0).max(300).optional().or(z.literal('')),
 });
@@ -112,10 +117,29 @@ export function EventDetailPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
   });
 
-  const updateHandicap = useMutation({
-    mutationFn: ({ id, handicap }: { id: string; handicap: number }) =>
-      updateEventPlayerHandicap(id, handicap),
+  const patchEventPlayer = useMutation({
+    mutationFn: ({
+      id,
+      patch,
+    }: {
+      id: string;
+      patch: { handicap?: number; lane_number?: number | null };
+    }) => updateEventPlayer(id, patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['event-players', eventId] }),
+  });
+
+  const patchPlayer = useMutation({
+    mutationFn: ({
+      id,
+      patch,
+    }: {
+      id: string;
+      patch: { affiliation?: string | null };
+    }) => updatePlayer(id, patch),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['event-players', eventId] });
+      qc.invalidateQueries({ queryKey: ['players'] });
+    },
   });
 
   const createSessionMut = useMutation({
@@ -124,6 +148,31 @@ export function EventDetailPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sessions', eventId] });
       toast.success('Session created');
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+  });
+
+  const recompute = useMutation({
+    mutationFn: async () => {
+      if (!event) throw new Error('No event');
+      const formula = {
+        base: event.hdcp_base,
+        factor: Number(event.hdcp_factor),
+        min: event.hdcp_min,
+        max: event.hdcp_max,
+      };
+      const updates = eventPlayers
+        .filter((ep) => ep.player.home_average != null && ep.player.home_average > 0)
+        .map((ep) => ({
+          id: ep.id,
+          handicap: computeHandicap(formula, ep.player.home_average),
+        }));
+      await bulkUpdateHandicaps(updates);
+      return updates.length;
+    },
+    onSuccess: (count) => {
+      qc.invalidateQueries({ queryKey: ['event-players', eventId] });
+      toast.success(`Recomputed handicaps for ${count} bowler${count === 1 ? '' : 's'}`);
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
   });
@@ -153,7 +202,7 @@ export function EventDetailPage() {
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-2xl font-bold">{event.name}</h1>
             <Badge variant="outline" className="capitalize">
               {event.type}
@@ -188,11 +237,18 @@ export function EventDetailPage() {
 
         <TabsContent value="roster">
           <Card>
-            <CardHeader className="flex-row items-center justify-between">
-              <CardTitle className="text-lg">
-                Players ({eventPlayers.length})
-              </CardTitle>
-              <div className="flex gap-2">
+            <CardHeader className="flex-row items-center justify-between flex-wrap gap-2">
+              <CardTitle className="text-lg">Players ({eventPlayers.length})</CardTitle>
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => recompute.mutate()}
+                  disabled={eventPlayers.length === 0 || recompute.isPending}
+                  title="Apply the handicap formula (base, factor, min, max) to every bowler using their home average"
+                >
+                  <Sigma className="h-4 w-4" /> Recompute handicaps
+                </Button>
                 <AddExistingPlayerDialog
                   players={unregisteredPlayers}
                   onAdd={(playerId, handicap) => addExisting.mutate({ playerId, handicap })}
@@ -213,8 +269,10 @@ export function EventDetailPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
-                      <TableHead className="w-32">Handicap</TableHead>
-                      <TableHead className="w-32">Home avg</TableHead>
+                      <TableHead>Affiliation</TableHead>
+                      <TableHead className="w-28">Home avg</TableHead>
+                      <TableHead className="w-28">HDCP</TableHead>
+                      <TableHead className="w-24">Lane</TableHead>
                       <TableHead className="w-12" />
                     </TableRow>
                   </TableHeader>
@@ -224,19 +282,60 @@ export function EventDetailPage() {
                         <TableCell className="font-medium">{ep.player.full_name}</TableCell>
                         <TableCell>
                           <Input
-                            type="number"
-                            min={0}
-                            max={100}
-                            defaultValue={ep.handicap}
-                            className="h-8 w-24"
+                            defaultValue={ep.player.affiliation ?? ''}
+                            className="h-8"
+                            placeholder="(none)"
                             onBlur={(e) => {
-                              const v = Number(e.target.value);
-                              if (v !== ep.handicap) updateHandicap.mutate({ id: ep.id, handicap: v });
+                              const v = e.target.value.trim();
+                              const prev = ep.player.affiliation ?? '';
+                              if (v !== prev) {
+                                patchPlayer.mutate({
+                                  id: ep.player_id,
+                                  patch: { affiliation: v === '' ? null : v },
+                                });
+                              }
                             }}
                           />
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {ep.player.home_average ?? '—'}
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={300}
+                            defaultValue={ep.handicap}
+                            className="h-8 w-24"
+                            onBlur={(e) => {
+                              const v = Number(e.target.value);
+                              if (v !== ep.handicap) {
+                                patchEventPlayer.mutate({
+                                  id: ep.id,
+                                  patch: { handicap: v },
+                                });
+                              }
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={999}
+                            defaultValue={ep.lane_number ?? ''}
+                            className="h-8 w-20"
+                            onBlur={(e) => {
+                              const raw = e.target.value;
+                              const v = raw === '' ? null : Number(raw);
+                              if (v !== ep.lane_number) {
+                                patchEventPlayer.mutate({
+                                  id: ep.id,
+                                  patch: { lane_number: v },
+                                });
+                              }
+                            }}
+                          />
                         </TableCell>
                         <TableCell>
                           <Button
@@ -319,6 +418,7 @@ function CreatePlayerDialog({ onCreated }: { onCreated: (p: { id: string }) => v
     try {
       const p = await createPlayer({
         full_name: values.full_name,
+        affiliation: values.affiliation ? values.affiliation : null,
         handedness: values.handedness ?? null,
         home_average: values.home_average === '' ? null : values.home_average ?? null,
       });
@@ -350,6 +450,14 @@ function CreatePlayerDialog({ onCreated }: { onCreated: (p: { id: string }) => v
             {errors.full_name && (
               <p className="text-sm text-destructive">{errors.full_name.message}</p>
             )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="affiliation">Affiliation</Label>
+            <Input
+              id="affiliation"
+              {...register('affiliation')}
+              placeholder="PBA / DATBI / independent…"
+            />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">

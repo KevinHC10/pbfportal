@@ -12,6 +12,10 @@ export interface EventRow {
   public_slug: string;
   center_name: string | null;
   total_games: number;
+  hdcp_base: number;
+  hdcp_factor: number;
+  hdcp_max: number;
+  hdcp_min: number;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -23,6 +27,7 @@ export interface PlayerRow {
   avatar_url: string | null;
   handedness: Handedness | null;
   home_average: number | null;
+  affiliation: string | null;
   created_by: string;
   created_at: string;
 }
@@ -32,6 +37,7 @@ export interface EventPlayerRow {
   event_id: string;
   player_id: string;
   handicap: number;
+  lane_number: number | null;
   entry_date: string;
 }
 
