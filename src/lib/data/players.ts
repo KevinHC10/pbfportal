@@ -6,6 +6,7 @@ export interface PlayerInput {
   handedness?: Handedness | null;
   home_average?: number | null;
   avatar_url?: string | null;
+  affiliation?: string | null;
 }
 
 export async function listPlayers(): Promise<PlayerRow[]> {
@@ -35,6 +36,11 @@ export async function createPlayer(input: PlayerInput): Promise<PlayerRow> {
   return data as PlayerRow;
 }
 
+export async function updatePlayer(id: string, patch: Partial<PlayerInput>) {
+  const { error } = await supabase.from('players').update(patch).eq('id', id);
+  if (error) throw error;
+}
+
 export async function listEventPlayers(
   eventId: string
 ): Promise<Array<EventPlayerRow & { player: PlayerRow }>> {
@@ -61,12 +67,33 @@ export async function addPlayerToEvent(
   return data as EventPlayerRow;
 }
 
-export async function updateEventPlayerHandicap(id: string, handicap: number) {
-  const { error } = await supabase.from('event_players').update({ handicap }).eq('id', id);
+export async function updateEventPlayer(
+  id: string,
+  patch: Partial<Pick<EventPlayerRow, 'handicap' | 'lane_number'>>
+) {
+  const { error } = await supabase.from('event_players').update(patch).eq('id', id);
   if (error) throw error;
+}
+
+export async function updateEventPlayerHandicap(id: string, handicap: number) {
+  return updateEventPlayer(id, { handicap });
 }
 
 export async function removePlayerFromEvent(id: string) {
   const { error } = await supabase.from('event_players').delete().eq('id', id);
   if (error) throw error;
+}
+
+export async function bulkUpdateHandicaps(
+  updates: Array<{ id: string; handicap: number }>
+): Promise<void> {
+  // Supabase doesn't support multi-row conditional updates in a single call.
+  // Sequential awaits are fine for typical league sizes (< 100 bowlers).
+  for (const u of updates) {
+    const { error } = await supabase
+      .from('event_players')
+      .update({ handicap: u.handicap })
+      .eq('id', u.id);
+    if (error) throw error;
+  }
 }

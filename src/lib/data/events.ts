@@ -10,6 +10,10 @@ export interface EventInput {
   status: EventStatus;
   center_name: string | null;
   total_games: number;
+  hdcp_base?: number;
+  hdcp_factor?: number;
+  hdcp_max?: number;
+  hdcp_min?: number;
 }
 
 export async function listEvents(): Promise<EventRow[]> {
