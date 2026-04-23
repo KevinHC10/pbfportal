@@ -16,9 +16,67 @@ export interface EventRow {
   hdcp_factor: number;
   hdcp_max: number;
   hdcp_min: number;
+  league_id: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
+}
+
+export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+export interface LeagueRow {
+  id: string;
+  name: string;
+  acronym: string | null;
+  parent_league_id: string | null;
+  center_name: string | null;
+  day_of_week: DayOfWeek | null;
+  start_time_local: string | null; // "HH:MM:SS"
+  timezone: string | null;
+  description: string | null;
+  logo_url: string | null;
+  banner_url: string | null;
+  public_slug: string;
+  hdcp_base: number;
+  hdcp_factor: number;
+  hdcp_max: number;
+  hdcp_min: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type MembershipStatus = 'regular' | 'guest';
+
+export interface LeagueMembershipRow {
+  id: string;
+  league_id: string;
+  player_id: string;
+  status: MembershipStatus;
+  season_label: string;
+  joined_at: string;
+}
+
+export type PotGameType = 'singles' | 'doubles';
+
+export interface PotGameRow {
+  id: string;
+  session_id: string;
+  type: PotGameType;
+  name: string;
+  game_number: number;
+  factor: number;
+  hdcp_min: number;
+  hdcp_max: number;
+  created_at: string;
+}
+
+export interface PotGameEntryRow {
+  id: string;
+  pot_game_id: string;
+  event_player_id: string;
+  partner_event_player_id: string | null;
+  created_at: string;
 }
 
 export interface PlayerRow {

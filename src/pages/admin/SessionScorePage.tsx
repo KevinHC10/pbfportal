@@ -16,6 +16,7 @@ import {
 } from '@/lib/data/sessions';
 import { SessionLeaderboard } from '@/components/leaderboard/SessionLeaderboard';
 import { GameEditModal } from '@/components/scoresheet/GameEditModal';
+import { PotGamesSection } from '@/components/pots/PotGamesSection';
 import { useEventRealtime } from '@/hooks/useEventRealtime';
 
 export function SessionScorePage() {
@@ -125,6 +126,17 @@ export function SessionScorePage() {
           sessionGames={sessionGames}
           onRowClick={(id) => setEditingEpId(id)}
           publicSlug={event.public_slug}
+        />
+      )}
+
+      {eventPlayers.length > 0 && (
+        <PotGamesSection
+          event={event}
+          session={session}
+          eventPlayers={eventPlayers}
+          allEventGames={allEventGames}
+          sessionGames={sessionGames}
+          adminMode
         />
       )}
 

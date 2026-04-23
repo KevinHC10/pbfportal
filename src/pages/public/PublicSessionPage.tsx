@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SessionLeaderboard } from '@/components/leaderboard/SessionLeaderboard';
+import { PotGamesSection } from '@/components/pots/PotGamesSection';
 import { Badge } from '@/components/ui/badge';
 import {
   fetchPublicEvent,
@@ -71,14 +72,24 @@ export function PublicSessionPage() {
           </CardContent>
         </Card>
       ) : (
-        <SessionLeaderboard
-          event={event}
-          session={data.session}
-          eventPlayers={players}
-          allEventGames={allEventGames}
-          sessionGames={data.games}
-          publicSlug={event.public_slug}
-        />
+        <>
+          <SessionLeaderboard
+            event={event}
+            session={data.session}
+            eventPlayers={players}
+            allEventGames={allEventGames}
+            sessionGames={data.games}
+            publicSlug={event.public_slug}
+          />
+          <PotGamesSection
+            event={event}
+            session={data.session}
+            eventPlayers={players}
+            allEventGames={allEventGames}
+            sessionGames={data.games}
+            adminMode={false}
+          />
+        </>
       )}
     </div>
   );

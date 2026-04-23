@@ -21,16 +21,21 @@ a shareable public link, no login required.
 src/
   components/
     ui/              shadcn primitives
-    scoresheet/      FrameGrid (keyboard-friendly 10-frame grid)
-    leaderboard/     Leaderboard table
+    scoresheet/      FrameGrid + GameEditModal
+    leaderboard/     Leaderboard + SessionLeaderboard
+    pots/            PotGamesSection (singles/doubles side games)
     layout/          AppShell, ProtectedRoute
   pages/
-    admin/           dashboard, event editor, event detail, session score entry
-    public/          event, player, session, landing pages
+    admin/           events dashboard/editor/detail, sessions,
+                     leagues dashboard/editor/detail, players
+    public/          landing, event, session, player, league profile
     auth/            login
   lib/
     scoring.ts       pure 10-pin scoring (unit-tested)
-    leaderboard.ts   pure leaderboard computation
+    leaderboard.ts   pure event + session leaderboard computation
+    handicap.ts      league handicap formula
+    pot.ts           pot-game handicap (singles + doubles pair balance)
+    schedule.ts      day-of-week / time-zone formatting for leagues
     supabase.ts      supabase client
     auth.tsx         AuthProvider + useAuth
     theme.tsx        next-themes wrapper
@@ -40,10 +45,37 @@ src/
   hooks/             useEventRealtime
   types/             db row types
 supabase/
-  migrations/        initial_schema.sql + rls.sql
+  migrations/
+    20260101000000_initial_schema.sql
+    20260101000001_rls.sql
+    20260101000002_v2_leagues.sql           (affiliation, lane, event formula)
+    20260101000003_v3_leagues.sql            (leagues, memberships, pot games)
+    20260101000004_v3_rls.sql                (RLS for the above)
 scripts/
   seed.ts            demo admin + league + tournament
+  generate-tournament-sql.ts
 ```
+
+## Domain model
+
+- **League** (`/admin/leagues`) — the persistent association (MTBA-Remate,
+  CBA, etc). Owns the default handicap formula, bowling center, meeting
+  day/time, description, logo, banner, and can nest via `parent_league_id`
+  (e.g. MTBA → MTBA-Remate).
+- **League membership** — links a player to a league with status
+  `regular` or `guest` and a free-text `season_label`. Drives the
+  Regular / Guest split on the public league profile.
+- **Event** (`/admin`) — a league week or a standalone tournament.
+  Optionally `league_id`-linked; inherits the league's formula + center
+  on create.
+- **Session** — a single bowling date within an event.
+- **Game / Frame** — as before. One game per (player × game number) per
+  session.
+- **Pot game** — a singles or doubles side competition scoped to a
+  session and a specific game number. Its handicap is independent of the
+  league handicap: the top averager in the pot gets HDCP 0; everyone
+  else's HDCP = `clamp((top_avg − bowler_avg) × factor, min, max)`.
+  Doubles pair up bowlers (admin-assigned or auto-paired high+low).
 
 ## Setup
 

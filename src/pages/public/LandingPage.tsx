@@ -26,8 +26,14 @@ export function LandingPage() {
         <CardContent className="py-6 space-y-2 text-sm text-muted-foreground">
           <p>
             <strong className="text-foreground">Have a link?</strong> Paste it in
-            your browser or follow the QR code from your event organizer to see
-            the live leaderboard — no login required.
+            your browser or follow the QR code from your organizer.
+          </p>
+          <p>
+            Event leaderboards live at{' '}
+            <code className="text-foreground">/e/&lt;slug&gt;</code>. League
+            profiles live at{' '}
+            <code className="text-foreground">/leagues/&lt;slug&gt;</code>. No
+            login required to view either.
           </p>
         </CardContent>
       </Card>

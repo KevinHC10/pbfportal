@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Trophy, Users, LayoutDashboard, LogOut, Moon, Sun } from 'lucide-react';
+import { Trophy, Users, LayoutDashboard, LogOut, Moon, Sun, Flag } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -21,6 +21,9 @@ export function AppShell() {
           <nav className="flex-1 flex items-center gap-1">
             <NavItem to="/admin" icon={<LayoutDashboard className="h-4 w-4" />}>
               Events
+            </NavItem>
+            <NavItem to="/admin/leagues" icon={<Flag className="h-4 w-4" />}>
+              Leagues
             </NavItem>
             <NavItem to="/admin/players" icon={<Users className="h-4 w-4" />}>
               Players
