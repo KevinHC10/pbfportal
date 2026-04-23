@@ -1,10 +1,11 @@
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useNavigate, useParams, Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { ChevronLeft } from 'lucide-react';
+import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { createEvent, getEvent, updateEvent } from '@/lib/data/events';
+import { listLeagues } from '@/lib/data/leagues';
 import { computeHandicap, DEFAULT_HANDICAP_FORMULA } from '@/lib/handicap';
 
 const schema = z.object({
@@ -31,6 +33,7 @@ const schema = z.object({
   hdcp_factor: z.coerce.number().min(0).max(2),
   hdcp_max: z.coerce.number().int().min(0).max(300),
   hdcp_min: z.coerce.number().int().min(0).max(300),
+  league_id: z.string().optional().or(z.literal('')),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -40,12 +43,16 @@ export function EventEditorPage() {
   const isEdit = Boolean(eventId);
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const presetLeagueId = searchParams.get('league_id') ?? '';
 
   const { data: existing, isLoading } = useQuery({
     queryKey: ['event', eventId],
     queryFn: () => getEvent(eventId!),
     enabled: isEdit,
   });
+
+  const { data: leagues = [] } = useQuery({ queryKey: ['leagues'], queryFn: listLeagues });
 
   const {
     register,
@@ -60,6 +67,7 @@ export function EventEditorPage() {
       type: 'league',
       status: 'upcoming',
       total_games: 3,
+      league_id: presetLeagueId,
       hdcp_base: DEFAULT_HANDICAP_FORMULA.base,
       hdcp_factor: DEFAULT_HANDICAP_FORMULA.factor,
       hdcp_max: DEFAULT_HANDICAP_FORMULA.max,
@@ -80,8 +88,28 @@ export function EventEditorPage() {
       hdcp_factor: Number(existing.hdcp_factor),
       hdcp_max: existing.hdcp_max,
       hdcp_min: existing.hdcp_min,
+      league_id: existing.league_id ?? '',
     });
   }
+
+  const selectedLeagueId = watch('league_id');
+  const selectedLeague = leagues.find((l) => l.id === selectedLeagueId);
+
+  // When the user picks a league on a NEW event, inherit its defaults.
+  const didApplyInheritance = React.useRef(false);
+  React.useEffect(() => {
+    if (isEdit) return;
+    if (!selectedLeague) return;
+    if (didApplyInheritance.current) return;
+    didApplyInheritance.current = true;
+    setValue('hdcp_base', selectedLeague.hdcp_base, { shouldDirty: true });
+    setValue('hdcp_factor', Number(selectedLeague.hdcp_factor), { shouldDirty: true });
+    setValue('hdcp_max', selectedLeague.hdcp_max, { shouldDirty: true });
+    setValue('hdcp_min', selectedLeague.hdcp_min, { shouldDirty: true });
+    if (selectedLeague.center_name) {
+      setValue('center_name', selectedLeague.center_name, { shouldDirty: true });
+    }
+  }, [selectedLeague, isEdit, setValue]);
 
   const onSubmit = async (values: FormValues) => {
     const payload = {
@@ -96,6 +124,7 @@ export function EventEditorPage() {
       hdcp_factor: values.hdcp_factor,
       hdcp_max: values.hdcp_max,
       hdcp_min: values.hdcp_min,
+      league_id: values.league_id ? values.league_id : null,
     };
     try {
       if (isEdit && eventId) {
@@ -117,7 +146,6 @@ export function EventEditorPage() {
 
   const createMutation = useMutation({ mutationFn: onSubmit });
   const type = watch('type');
-  const hdcpPreviewAvg = 160;
   const hdcpPreview = computeHandicap(
     {
       base: Number(watch('hdcp_base') ?? 0),
@@ -125,7 +153,7 @@ export function EventEditorPage() {
       min: Number(watch('hdcp_min') ?? 0),
       max: Number(watch('hdcp_max') ?? 0),
     },
-    hdcpPreviewAvg
+    160
   );
 
   return (
@@ -148,8 +176,37 @@ export function EventEditorPage() {
               className="space-y-4"
             >
               <div className="space-y-2">
+                <Label>League (optional)</Label>
+                <Select
+                  value={watch('league_id') ?? ''}
+                  onValueChange={(v) =>
+                    setValue('league_id', v === 'none' ? '' : v, { shouldDirty: true })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Standalone event" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Standalone event</SelectItem>
+                    {leagues.map((l) => (
+                      <SelectItem key={l.id} value={l.id}>
+                        {l.name}
+                        {l.acronym ? ` (${l.acronym})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!isEdit && selectedLeague && (
+                  <p className="text-xs text-muted-foreground">
+                    Inherited {selectedLeague.name}'s handicap formula and center. You can
+                    still override below.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="name">Name</Label>
-                <Input id="name" {...register('name')} placeholder="Tuesday Night Classic" />
+                <Input id="name" {...register('name')} placeholder="Week 3 – Feb 14" />
                 {errors.name && (
                   <p className="text-sm text-destructive">{errors.name.message}</p>
                 )}
@@ -274,7 +331,7 @@ export function EventEditorPage() {
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Preview: a bowler averaging <strong>{hdcpPreviewAvg}</strong> →{' '}
+                  Preview: a bowler averaging <strong>160</strong> →{' '}
                   <strong className="text-foreground">HDCP {hdcpPreview}</strong>
                 </p>
               </div>

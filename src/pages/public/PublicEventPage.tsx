@@ -1,7 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Calendar, Download, FileText, MapPin, Users } from 'lucide-react';
+import { Calendar, Download, FileText, Flag, MapPin, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +12,7 @@ import {
   fetchPublicEventFrames,
   fetchPublicEventGames,
   fetchPublicEventPlayers,
+  fetchPublicLeagueById,
   fetchPublicSessions,
 } from '@/lib/data/public';
 import { useEventRealtime } from '@/hooks/useEventRealtime';
@@ -29,6 +30,11 @@ export function PublicEventPage() {
     queryKey: ['public-event-players', event?.id],
     queryFn: () => fetchPublicEventPlayers(event!.id),
     enabled: Boolean(event?.id),
+  });
+  const { data: league } = useQuery({
+    queryKey: ['public-event-league', event?.league_id],
+    queryFn: () => fetchPublicLeagueById(event!.league_id!),
+    enabled: Boolean(event?.league_id),
   });
   const { data: sessions = [] } = useQuery({
     queryKey: ['public-event-sessions', event?.id],
@@ -84,6 +90,15 @@ export function PublicEventPage() {
             <Badge variant="live" className="animate-pulse-live">
               ● LIVE
             </Badge>
+          )}
+          {league && (
+            <Link
+              to={`/leagues/${league.public_slug}`}
+              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground hover:underline"
+            >
+              <Flag className="h-3.5 w-3.5" />
+              {league.acronym ?? league.name}
+            </Link>
           )}
         </div>
         <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">

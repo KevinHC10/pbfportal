@@ -14,6 +14,17 @@ export interface EventInput {
   hdcp_factor?: number;
   hdcp_max?: number;
   hdcp_min?: number;
+  league_id?: string | null;
+}
+
+export async function listEventsByLeague(leagueId: string): Promise<EventRow[]> {
+  const { data, error } = await supabase
+    .from('events')
+    .select('*')
+    .eq('league_id', leagueId)
+    .order('start_date', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as EventRow[];
 }
 
 export async function listEvents(): Promise<EventRow[]> {

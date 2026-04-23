@@ -4,6 +4,8 @@ import type {
   EventRow,
   FrameRow,
   GameRow,
+  LeagueMembershipRow,
+  LeagueRow,
   PlayerRow,
   SessionRow,
 } from '@/types/db';
@@ -65,6 +67,57 @@ export async function fetchPublicEventFrames(
   const { data, error } = await supabase.from('frames').select('*').in('game_id', ids);
   if (error) throw error;
   return (data ?? []) as FrameRow[];
+}
+
+export async function fetchPublicLeague(slug: string): Promise<LeagueRow | null> {
+  const { data, error } = await supabase
+    .from('leagues')
+    .select('*')
+    .eq('public_slug', slug)
+    .maybeSingle();
+  if (error) throw error;
+  return data as LeagueRow | null;
+}
+
+export async function fetchPublicLeagueById(id: string): Promise<LeagueRow | null> {
+  const { data, error } = await supabase
+    .from('leagues')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data as LeagueRow | null;
+}
+
+export async function fetchPublicLeagueMemberships(
+  leagueId: string
+): Promise<Array<LeagueMembershipRow & { player: PlayerRow }>> {
+  const { data, error } = await supabase
+    .from('league_memberships')
+    .select('*, player:players(*)')
+    .eq('league_id', leagueId);
+  if (error) throw error;
+  return (data ?? []) as Array<LeagueMembershipRow & { player: PlayerRow }>;
+}
+
+export async function fetchPublicLeagueEvents(leagueId: string): Promise<EventRow[]> {
+  const { data, error } = await supabase
+    .from('events')
+    .select('*')
+    .eq('league_id', leagueId)
+    .order('start_date', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as EventRow[];
+}
+
+export async function fetchPublicSubLeagues(parentId: string): Promise<LeagueRow[]> {
+  const { data, error } = await supabase
+    .from('leagues')
+    .select('*')
+    .eq('parent_league_id', parentId)
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as LeagueRow[];
 }
 
 export async function fetchSessionWithGames(sessionId: string): Promise<{
