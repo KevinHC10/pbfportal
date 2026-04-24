@@ -15,6 +15,7 @@ export interface EventInput {
   hdcp_max?: number;
   hdcp_min?: number;
   league_id?: string | null;
+  season_id?: string | null;
 }
 
 export async function listEventsByLeague(leagueId: string): Promise<EventRow[]> {

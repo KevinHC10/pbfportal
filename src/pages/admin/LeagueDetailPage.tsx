@@ -51,17 +51,31 @@ import {
   removeMembership,
   updateMembership,
 } from '@/lib/data/leagues';
+import {
+  createSeason,
+  deleteSeason,
+  listSeasons,
+  updateSeason,
+} from '@/lib/data/seasons';
 import { listEventsByLeague } from '@/lib/data/events';
 import { listPlayers } from '@/lib/data/players';
 import { formatScheduleLine } from '@/lib/schedule';
-import type { MembershipStatus } from '@/types/db';
+import type { MembershipStatus, SeasonRow, SeasonStatus } from '@/types/db';
 
 const addMemberSchema = z.object({
   player_id: z.string().min(1),
   status: z.enum(['regular', 'guest']),
-  season_label: z.string().max(40).optional().or(z.literal('')),
+  season_id: z.string().min(1, 'Pick a season'),
 });
 type AddMemberForm = z.infer<typeof addMemberSchema>;
+
+const seasonSchema = z.object({
+  name: z.string().min(1).max(80),
+  start_date: z.string().optional().or(z.literal('')),
+  end_date: z.string().optional().or(z.literal('')),
+  status: z.enum(['upcoming', 'active', 'completed']),
+});
+type SeasonForm = z.infer<typeof seasonSchema>;
 
 export function LeagueDetailPage() {
   const { leagueId } = useParams();
@@ -72,25 +86,26 @@ export function LeagueDetailPage() {
     queryFn: () => getLeague(leagueId!),
     enabled: Boolean(leagueId),
   });
-
   const { data: memberships = [] } = useQuery({
     queryKey: ['league-memberships', leagueId],
     queryFn: () => listMemberships(leagueId!),
     enabled: Boolean(leagueId),
   });
-
+  const { data: seasons = [] } = useQuery({
+    queryKey: ['league-seasons', leagueId],
+    queryFn: () => listSeasons(leagueId!),
+    enabled: Boolean(leagueId),
+  });
   const { data: subLeagues = [] } = useQuery({
     queryKey: ['sub-leagues', leagueId],
     queryFn: () => listSubLeagues(leagueId!),
     enabled: Boolean(leagueId),
   });
-
   const { data: events = [] } = useQuery({
     queryKey: ['league-events', leagueId],
     queryFn: () => listEventsByLeague(leagueId!),
     enabled: Boolean(leagueId),
   });
-
   const { data: players = [] } = useQuery({ queryKey: ['players'], queryFn: listPlayers });
 
   const remove = useMutation({
@@ -108,9 +123,35 @@ export function LeagueDetailPage() {
       patch: p,
     }: {
       id: string;
-      patch: Partial<{ status: MembershipStatus; season_label: string }>;
+      patch: Partial<{ status: MembershipStatus; season_id: string | null }>;
     }) => updateMembership(id, p),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['league-memberships', leagueId] }),
+  });
+
+  // -------- season mutations --------
+  const createSeasonMut = useMutation({
+    mutationFn: createSeason,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['league-seasons', leagueId] });
+      toast.success('Season created');
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+  });
+
+  const patchSeason = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<SeasonRow> }) =>
+      updateSeason(id, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['league-seasons', leagueId] }),
+  });
+
+  const removeSeason = useMutation({
+    mutationFn: deleteSeason,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['league-seasons', leagueId] });
+      qc.invalidateQueries({ queryKey: ['league-memberships', leagueId] });
+      toast.success('Season removed');
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
   });
 
   if (isLoading || !league) {
@@ -126,6 +167,7 @@ export function LeagueDetailPage() {
   const availablePlayers = players.filter(
     (p) => !memberships.some((m) => m.player_id === p.id)
   );
+  const activeSeason = seasons.find((s) => s.status === 'active') ?? seasons[0] ?? null;
 
   return (
     <div className="space-y-6">
@@ -140,6 +182,9 @@ export function LeagueDetailPage() {
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-2xl font-bold">{league.name}</h1>
             {league.acronym && <Badge variant="outline">{league.acronym}</Badge>}
+            {activeSeason && (
+              <Badge variant="success">Current: {activeSeason.name}</Badge>
+            )}
           </div>
           <p className="text-sm text-muted-foreground">
             {league.center_name ? `${league.center_name} · ` : ''}
@@ -163,6 +208,7 @@ export function LeagueDetailPage() {
       <Tabs defaultValue="members">
         <TabsList>
           <TabsTrigger value="members">Members</TabsTrigger>
+          <TabsTrigger value="seasons">Seasons</TabsTrigger>
           <TabsTrigger value="events">Events</TabsTrigger>
           <TabsTrigger value="sub-leagues">Sub-leagues</TabsTrigger>
         </TabsList>
@@ -175,13 +221,15 @@ export function LeagueDetailPage() {
               </CardTitle>
               <AddMemberDialog
                 availablePlayers={availablePlayers}
+                seasons={seasons}
+                defaultSeasonId={activeSeason?.id ?? ''}
                 onAdd={async (values) => {
                   try {
                     await addMembership({
                       league_id: league.id,
                       player_id: values.player_id,
                       status: values.status,
-                      season_label: values.season_label ?? '',
+                      season_id: values.season_id || null,
                     });
                     qc.invalidateQueries({ queryKey: ['league-memberships', league.id] });
                     toast.success('Member added');
@@ -192,7 +240,11 @@ export function LeagueDetailPage() {
               />
             </CardHeader>
             <CardContent>
-              {memberships.length === 0 ? (
+              {seasons.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Create a season first in the Seasons tab, then add members.
+                </p>
+              ) : memberships.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No members yet.</p>
               ) : (
                 <Table>
@@ -200,7 +252,7 @@ export function LeagueDetailPage() {
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead className="w-28">Status</TableHead>
-                      <TableHead className="w-32">Season</TableHead>
+                      <TableHead className="w-44">Season</TableHead>
                       <TableHead className="w-12" />
                     </TableRow>
                   </TableHeader>
@@ -228,20 +280,27 @@ export function LeagueDetailPage() {
                           </Select>
                         </TableCell>
                         <TableCell>
-                          <Input
-                            defaultValue={m.season_label}
-                            placeholder="2026 S1"
-                            className="h-8"
-                            onBlur={(e) => {
-                              const v = e.target.value.trim();
-                              if (v !== m.season_label) {
-                                patch.mutate({
-                                  id: m.id,
-                                  patch: { season_label: v },
-                                });
-                              }
-                            }}
-                          />
+                          <Select
+                            value={m.season_id ?? ''}
+                            onValueChange={(v) =>
+                              patch.mutate({
+                                id: m.id,
+                                patch: { season_id: v || null },
+                              })
+                            }
+                          >
+                            <SelectTrigger className="h-8">
+                              <SelectValue placeholder="—" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {seasons.map((s) => (
+                                <SelectItem key={s.id} value={s.id}>
+                                  {s.name}
+                                  {s.status === 'active' ? ' (active)' : ''}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </TableCell>
                         <TableCell>
                           <Button
@@ -249,6 +308,123 @@ export function LeagueDetailPage() {
                             variant="ghost"
                             onClick={() => remove.mutate(m.id)}
                             aria-label={`Remove ${m.player.full_name}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="seasons">
+          <Card>
+            <CardHeader className="flex-row items-center justify-between flex-wrap gap-2">
+              <CardTitle className="text-lg">Seasons ({seasons.length})</CardTitle>
+              <CreateSeasonDialog
+                onCreate={(v) =>
+                  createSeasonMut.mutate({
+                    league_id: league.id,
+                    name: v.name,
+                    start_date: v.start_date ? v.start_date : null,
+                    end_date: v.end_date ? v.end_date : null,
+                    status: v.status,
+                  })
+                }
+              />
+            </CardHeader>
+            <CardContent>
+              {seasons.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No seasons yet. Create one to group members and events.
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead className="w-36">Start</TableHead>
+                      <TableHead className="w-36">End</TableHead>
+                      <TableHead className="w-36">Status</TableHead>
+                      <TableHead className="w-12" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {seasons.map((s) => (
+                      <TableRow key={s.id}>
+                        <TableCell>
+                          <Input
+                            defaultValue={s.name}
+                            className="h-8"
+                            onBlur={(e) => {
+                              const v = e.target.value.trim();
+                              if (v && v !== s.name)
+                                patchSeason.mutate({ id: s.id, patch: { name: v } });
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="date"
+                            defaultValue={s.start_date ?? ''}
+                            className="h-8"
+                            onBlur={(e) => {
+                              const v = e.target.value || null;
+                              if (v !== s.start_date)
+                                patchSeason.mutate({ id: s.id, patch: { start_date: v } });
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="date"
+                            defaultValue={s.end_date ?? ''}
+                            className="h-8"
+                            onBlur={(e) => {
+                              const v = e.target.value || null;
+                              if (v !== s.end_date)
+                                patchSeason.mutate({ id: s.id, patch: { end_date: v } });
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={s.status}
+                            onValueChange={(v) =>
+                              patchSeason.mutate({
+                                id: s.id,
+                                patch: { status: v as SeasonStatus },
+                              })
+                            }
+                          >
+                            <SelectTrigger className="h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="upcoming">Upcoming</SelectItem>
+                              <SelectItem value="active">Active</SelectItem>
+                              <SelectItem value="completed">Completed</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              if (
+                                confirm(
+                                  `Delete season "${s.name}"? Members and events in this season will keep their rows but lose the season link.`
+                                )
+                              ) {
+                                removeSeason.mutate(s.id);
+                              }
+                            }}
+                            aria-label={`Delete ${s.name}`}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -277,21 +453,25 @@ export function LeagueDetailPage() {
                 <p className="text-sm text-muted-foreground">No events under this league.</p>
               ) : (
                 <div className="space-y-2">
-                  {events.map((e) => (
-                    <Link
-                      key={e.id}
-                      to={`/admin/events/${e.id}`}
-                      className="flex items-center justify-between rounded-md border p-3 hover:bg-accent transition-colors"
-                    >
-                      <div>
-                        <div className="font-medium">{e.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {e.type} · {e.start_date}
+                  {events.map((e) => {
+                    const s = seasons.find((x) => x.id === e.season_id);
+                    return (
+                      <Link
+                        key={e.id}
+                        to={`/admin/events/${e.id}`}
+                        className="flex items-center justify-between rounded-md border p-3 hover:bg-accent transition-colors"
+                      >
+                        <div>
+                          <div className="font-medium">{e.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {e.type} · {e.start_date}
+                            {s ? ` · ${s.name}` : ''}
+                          </div>
                         </div>
-                      </div>
-                      <Badge variant="secondary">{e.status}</Badge>
-                    </Link>
-                  ))}
+                        <Badge variant="secondary">{e.status}</Badge>
+                      </Link>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -341,27 +521,47 @@ export function LeagueDetailPage() {
 
 function AddMemberDialog({
   availablePlayers,
+  seasons,
+  defaultSeasonId,
   onAdd,
 }: {
   availablePlayers: Array<{ id: string; full_name: string }>;
+  seasons: SeasonRow[];
+  defaultSeasonId: string;
   onAdd: (v: AddMemberForm) => Promise<void>;
 }) {
   const [open, setOpen] = React.useState(false);
   const {
     handleSubmit,
-    register,
     setValue,
     watch,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<AddMemberForm>({
     resolver: zodResolver(addMemberSchema),
-    defaultValues: { status: 'regular' },
+    defaultValues: { status: 'regular', season_id: defaultSeasonId },
   });
+
+  React.useEffect(() => {
+    if (open) {
+      reset({ status: 'regular', season_id: defaultSeasonId, player_id: '' });
+    }
+  }, [open, defaultSeasonId, reset]);
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" disabled={availablePlayers.length === 0}>
+        <Button
+          size="sm"
+          disabled={availablePlayers.length === 0 || seasons.length === 0}
+          title={
+            seasons.length === 0
+              ? 'Create a season first'
+              : availablePlayers.length === 0
+                ? 'All known players are already members'
+                : undefined
+          }
+        >
           <UserPlus className="h-4 w-4" /> Add member
         </Button>
       </DialogTrigger>
@@ -372,7 +572,6 @@ function AddMemberDialog({
         <form
           onSubmit={handleSubmit(async (v) => {
             await onAdd(v);
-            reset();
             setOpen(false);
           })}
           className="space-y-4"
@@ -417,18 +616,113 @@ function AddMemberDialog({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="season_label">Season (optional)</Label>
-              <Input
-                id="season_label"
-                {...register('season_label')}
-                placeholder="2026 S1"
-              />
+              <Label>Season</Label>
+              <Select
+                value={watch('season_id') ?? ''}
+                onValueChange={(v) => setValue('season_id', v, { shouldDirty: true })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Pick a season" />
+                </SelectTrigger>
+                <SelectContent>
+                  {seasons.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                      {s.status === 'active' ? ' (active)' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.season_id && (
+                <p className="text-sm text-destructive">{errors.season_id.message}</p>
+              )}
             </div>
           </div>
           <DialogFooter>
             <Button type="submit" disabled={isSubmitting}>
               Add
             </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CreateSeasonDialog({
+  onCreate,
+}: {
+  onCreate: (v: SeasonForm) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    reset,
+    formState: { errors },
+  } = useForm<SeasonForm>({
+    resolver: zodResolver(seasonSchema),
+    defaultValues: { status: 'upcoming' },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm">
+          <Plus className="h-4 w-4" /> New season
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New season</DialogTitle>
+        </DialogHeader>
+        <form
+          onSubmit={handleSubmit((v) => {
+            onCreate(v);
+            reset();
+            setOpen(false);
+          })}
+          className="space-y-4"
+        >
+          <div className="space-y-2">
+            <Label htmlFor="season_name">Name</Label>
+            <Input id="season_name" {...register('name')} placeholder="2026 S1" />
+            {errors.name && (
+              <p className="text-sm text-destructive">{errors.name.message}</p>
+            )}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="season_start">Start</Label>
+              <Input id="season_start" type="date" {...register('start_date')} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="season_end">End</Label>
+              <Input id="season_end" type="date" {...register('end_date')} />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Status</Label>
+            <Select
+              value={watch('status') ?? 'upcoming'}
+              onValueChange={(v) =>
+                setValue('status', v as SeasonStatus, { shouldDirty: true })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="upcoming">Upcoming</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button type="submit">Create</Button>
           </DialogFooter>
         </form>
       </DialogContent>
