@@ -1,4 +1,10 @@
-import type { EventPlayerRow, FrameRow, GameRow, PlayerRow } from '@/types/db';
+import type {
+  EventPlayerRow,
+  FrameRow,
+  GameRow,
+  PlayerRow,
+  SessionLaneAssignmentRow,
+} from '@/types/db';
 
 // ------------------------------------------------------------------
 // Event-level aggregate leaderboard (used on the public event page)
@@ -118,6 +124,7 @@ export function buildSessionLeaderboard({
   allEventGames,
   sessionGames,
   totalGames,
+  laneAssignments = [],
 }: {
   eventPlayers: Array<EventPlayerRow & { player: PlayerRow }>;
   /** every game across every session in the event — used for the Avg column */
@@ -126,7 +133,13 @@ export function buildSessionLeaderboard({
   sessionGames: GameRow[];
   /** total games per session for this event */
   totalGames: number;
+  /** per-session lane overrides; fall back to event_players.lane_number */
+  laneAssignments?: SessionLaneAssignmentRow[];
 }): SessionLeaderboardRow[] {
+  const laneByEp = new Map<string, number | null>();
+  for (const la of laneAssignments) {
+    laneByEp.set(la.event_player_id, la.lane_number);
+  }
   const eventGamesByEp = new Map<string, GameRow[]>();
   for (const g of allEventGames) {
     const arr = eventGamesByEp.get(g.event_player_id) ?? [];
@@ -170,6 +183,9 @@ export function buildSessionLeaderboard({
     const gamesPlayed = scratchScores.length;
     const totalWithHdcp = totalScratch + ep.handicap * gamesPlayed;
 
+    const override = laneByEp.has(ep.id) ? laneByEp.get(ep.id) ?? null : undefined;
+    const lane = override !== undefined ? override : ep.lane_number ?? null;
+
     return {
       eventPlayerId: ep.id,
       playerId: ep.player_id,
@@ -177,7 +193,7 @@ export function buildSessionLeaderboard({
       affiliation: ep.player.affiliation ?? null,
       average: runningAverage ?? null,
       handicap: ep.handicap,
-      laneNumber: ep.lane_number ?? null,
+      laneNumber: lane,
       gameScores,
       gamesPlayed,
       totalScratch,

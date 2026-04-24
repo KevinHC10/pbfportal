@@ -7,6 +7,7 @@ import type {
   LeagueMembershipRow,
   LeagueRow,
   PlayerRow,
+  SessionLaneAssignmentRow,
   SessionRow,
 } from '@/types/db';
 
@@ -118,6 +119,17 @@ export async function fetchPublicSubLeagues(parentId: string): Promise<LeagueRow
     .order('name', { ascending: true });
   if (error) throw error;
   return (data ?? []) as LeagueRow[];
+}
+
+export async function fetchPublicSessionLaneAssignments(
+  sessionId: string
+): Promise<SessionLaneAssignmentRow[]> {
+  const { data, error } = await supabase
+    .from('session_lane_assignments')
+    .select('*')
+    .eq('session_id', sessionId);
+  if (error) throw error;
+  return (data ?? []) as SessionLaneAssignmentRow[];
 }
 
 export async function fetchSessionWithGames(sessionId: string): Promise<{
