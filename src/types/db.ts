@@ -79,6 +79,14 @@ export interface PotGameEntryRow {
   created_at: string;
 }
 
+export interface SessionLaneAssignmentRow {
+  id: string;
+  session_id: string;
+  event_player_id: string;
+  lane_number: number | null;
+  updated_at: string;
+}
+
 export interface PlayerRow {
   id: string;
   full_name: string;

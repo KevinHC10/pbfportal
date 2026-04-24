@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { getEvent } from '@/lib/data/events';
 import { listEventPlayers } from '@/lib/data/players';
+import { listSessionLaneAssignments } from '@/lib/data/lanes';
 import {
   ensureGamesForSession,
   getSession,
@@ -17,6 +18,7 @@ import {
 import { SessionLeaderboard } from '@/components/leaderboard/SessionLeaderboard';
 import { GameEditModal } from '@/components/scoresheet/GameEditModal';
 import { PotGamesSection } from '@/components/pots/PotGamesSection';
+import { LaneAssignmentsDialog } from '@/components/session/LaneAssignmentsDialog';
 import { useEventRealtime } from '@/hooks/useEventRealtime';
 
 export function SessionScorePage() {
@@ -66,6 +68,12 @@ export function SessionScorePage() {
   });
   const allEventGames = allGamesQuery.data ?? [];
 
+  const { data: laneAssignments = [] } = useQuery({
+    queryKey: ['session-lanes', sessionId],
+    queryFn: () => listSessionLaneAssignments(sessionId!),
+    enabled: Boolean(sessionId),
+  });
+
   useEventRealtime(eventId);
 
   const [editingEpId, setEditingEpId] = React.useState<string | null>(null);
@@ -102,11 +110,20 @@ export function SessionScorePage() {
             {eventPlayers.length} players · {event.total_games} games each
           </p>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <a href={publicUrl} target="_blank" rel="noreferrer">
-            <ExternalLink className="h-4 w-4" /> View public session
-          </a>
-        </Button>
+        <div className="flex items-center gap-2">
+          {eventPlayers.length > 0 && (
+            <LaneAssignmentsDialog
+              sessionId={session.id}
+              eventPlayers={eventPlayers}
+              assignments={laneAssignments}
+            />
+          )}
+          <Button asChild variant="outline" size="sm">
+            <a href={publicUrl} target="_blank" rel="noreferrer">
+              <ExternalLink className="h-4 w-4" /> View public session
+            </a>
+          </Button>
+        </div>
       </div>
 
       {eventPlayers.length === 0 ? (
@@ -124,6 +141,7 @@ export function SessionScorePage() {
           eventPlayers={eventPlayers}
           allEventGames={allEventGames}
           sessionGames={sessionGames}
+          laneAssignments={laneAssignments}
           onRowClick={(id) => setEditingEpId(id)}
           publicSlug={event.public_slug}
         />

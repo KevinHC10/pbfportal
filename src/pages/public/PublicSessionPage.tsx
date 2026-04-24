@@ -12,6 +12,7 @@ import {
   fetchPublicEvent,
   fetchPublicEventGames,
   fetchPublicEventPlayers,
+  fetchPublicSessionLaneAssignments,
   fetchSessionWithGames,
 } from '@/lib/data/public';
 import { useEventRealtime } from '@/hooks/useEventRealtime';
@@ -36,6 +37,11 @@ export function PublicSessionPage() {
   const { data } = useQuery({
     queryKey: ['public-session', sessionId],
     queryFn: () => fetchSessionWithGames(sessionId!),
+    enabled: Boolean(sessionId),
+  });
+  const { data: laneAssignments = [] } = useQuery({
+    queryKey: ['public-session-lanes', sessionId],
+    queryFn: () => fetchPublicSessionLaneAssignments(sessionId!),
     enabled: Boolean(sessionId),
   });
 
@@ -79,6 +85,7 @@ export function PublicSessionPage() {
             eventPlayers={players}
             allEventGames={allEventGames}
             sessionGames={data.games}
+            laneAssignments={laneAssignments}
             publicSlug={event.public_slug}
           />
           <PotGamesSection

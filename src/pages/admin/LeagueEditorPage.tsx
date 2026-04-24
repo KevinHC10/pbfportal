@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ImageUpload } from '@/components/ui/image-upload';
 import {
   Select,
   SelectContent,
@@ -284,30 +285,29 @@ export function LeagueEditorPage() {
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="logo_url">Logo URL</Label>
-                  <Input
-                    id="logo_url"
-                    {...register('logo_url')}
-                    placeholder="https://…/logo.png"
+              <div className="grid gap-4 sm:grid-cols-3">
+                <ImageUpload
+                  folder={leagueId ?? 'drafts'}
+                  kind="logo"
+                  value={watch('logo_url') || null}
+                  onChange={(v) => setValue('logo_url', v ?? '', { shouldDirty: true })}
+                  previewClassName="aspect-square"
+                />
+                <div className="sm:col-span-2">
+                  <ImageUpload
+                    folder={leagueId ?? 'drafts'}
+                    kind="banner"
+                    value={watch('banner_url') || null}
+                    onChange={(v) => setValue('banner_url', v ?? '', { shouldDirty: true })}
+                    previewClassName="aspect-[4/1] sm:aspect-[5/1]"
                   />
-                  {errors.logo_url && (
-                    <p className="text-sm text-destructive">{errors.logo_url.message}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="banner_url">Banner URL</Label>
-                  <Input
-                    id="banner_url"
-                    {...register('banner_url')}
-                    placeholder="https://…/banner.jpg"
-                  />
-                  {errors.banner_url && (
-                    <p className="text-sm text-destructive">{errors.banner_url.message}</p>
-                  )}
                 </div>
               </div>
+              {(errors.logo_url || errors.banner_url) && (
+                <p className="text-sm text-destructive">
+                  {errors.logo_url?.message ?? errors.banner_url?.message}
+                </p>
+              )}
 
               <div className="rounded-md border p-4 space-y-4">
                 <div>

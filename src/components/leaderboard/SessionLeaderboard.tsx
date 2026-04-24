@@ -21,6 +21,7 @@ import type {
   EventRow,
   GameRow,
   PlayerRow,
+  SessionLaneAssignmentRow,
   SessionRow,
 } from '@/types/db';
 
@@ -30,6 +31,7 @@ interface Props {
   eventPlayers: Array<EventPlayerRow & { player: PlayerRow }>;
   allEventGames: GameRow[];
   sessionGames: GameRow[];
+  laneAssignments?: SessionLaneAssignmentRow[];
   /** If provided, each row becomes a button that opens the editor for that player. */
   onRowClick?: (eventPlayerId: string) => void;
   /** Link each player name to their public profile under this slug. If absent, not clickable. */
@@ -42,6 +44,7 @@ export function SessionLeaderboard({
   eventPlayers,
   allEventGames,
   sessionGames,
+  laneAssignments,
   onRowClick,
   publicSlug,
 }: Props) {
@@ -54,10 +57,11 @@ export function SessionLeaderboard({
           allEventGames,
           sessionGames,
           totalGames: event.total_games,
+          laneAssignments,
         }),
         sort
       ),
-    [eventPlayers, allEventGames, sessionGames, event.total_games, sort]
+    [eventPlayers, allEventGames, sessionGames, event.total_games, laneAssignments, sort]
   );
 
   return (
