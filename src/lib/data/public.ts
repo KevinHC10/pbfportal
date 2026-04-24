@@ -7,6 +7,7 @@ import type {
   LeagueMembershipRow,
   LeagueRow,
   PlayerRow,
+  SeasonRow,
   SessionLaneAssignmentRow,
   SessionRow,
 } from '@/types/db';
@@ -92,13 +93,26 @@ export async function fetchPublicLeagueById(id: string): Promise<LeagueRow | nul
 
 export async function fetchPublicLeagueMemberships(
   leagueId: string
-): Promise<Array<LeagueMembershipRow & { player: PlayerRow }>> {
+): Promise<Array<LeagueMembershipRow & { player: PlayerRow; season: SeasonRow | null }>> {
   const { data, error } = await supabase
     .from('league_memberships')
-    .select('*, player:players(*)')
+    .select('*, player:players(*), season:seasons(*)')
     .eq('league_id', leagueId);
   if (error) throw error;
-  return (data ?? []) as Array<LeagueMembershipRow & { player: PlayerRow }>;
+  return (data ?? []) as Array<
+    LeagueMembershipRow & { player: PlayerRow; season: SeasonRow | null }
+  >;
+}
+
+export async function fetchPublicLeagueSeasons(leagueId: string): Promise<SeasonRow[]> {
+  const { data, error } = await supabase
+    .from('seasons')
+    .select('*')
+    .eq('league_id', leagueId)
+    .order('start_date', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as SeasonRow[];
 }
 
 export async function fetchPublicLeagueEvents(leagueId: string): Promise<EventRow[]> {

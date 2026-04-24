@@ -17,6 +17,7 @@ export interface EventRow {
   hdcp_max: number;
   hdcp_min: number;
   league_id: string | null;
+  season_id: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -48,12 +49,26 @@ export interface LeagueRow {
 
 export type MembershipStatus = 'regular' | 'guest';
 
+export type SeasonStatus = 'upcoming' | 'active' | 'completed';
+
+export interface SeasonRow {
+  id: string;
+  league_id: string;
+  name: string;
+  start_date: string | null;
+  end_date: string | null;
+  status: SeasonStatus;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface LeagueMembershipRow {
   id: string;
   league_id: string;
   player_id: string;
   status: MembershipStatus;
   season_label: string;
+  season_id: string | null;
   joined_at: string;
 }
 

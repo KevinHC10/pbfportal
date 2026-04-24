@@ -6,6 +6,7 @@ import type {
   LeagueRow,
   MembershipStatus,
   PlayerRow,
+  SeasonRow,
 } from '@/types/db';
 
 export interface LeagueInput {
@@ -94,12 +95,13 @@ export async function deleteLeague(id: string): Promise<void> {
 
 export interface MembershipWithPlayer extends LeagueMembershipRow {
   player: PlayerRow;
+  season: SeasonRow | null;
 }
 
 export async function listMemberships(leagueId: string): Promise<MembershipWithPlayer[]> {
   const { data, error } = await supabase
     .from('league_memberships')
-    .select('*, player:players(*)')
+    .select('*, player:players(*), season:seasons(*)')
     .eq('league_id', leagueId)
     .order('joined_at', { ascending: true });
   if (error) throw error;
@@ -110,11 +112,19 @@ export async function addMembership(input: {
   league_id: string;
   player_id: string;
   status: MembershipStatus;
-  season_label: string;
+  season_id: string | null;
 }): Promise<LeagueMembershipRow> {
   const { data, error } = await supabase
     .from('league_memberships')
-    .insert(input)
+    .insert({
+      league_id: input.league_id,
+      player_id: input.player_id,
+      status: input.status,
+      season_id: input.season_id,
+      // Keep season_label filled as a denormalized fallback so older code +
+      // unique constraints (league_id, player_id, season_label) keep working.
+      season_label: '',
+    })
     .select()
     .single();
   if (error) throw error;
@@ -123,7 +133,7 @@ export async function addMembership(input: {
 
 export async function updateMembership(
   id: string,
-  patch: Partial<Pick<LeagueMembershipRow, 'status' | 'season_label'>>
+  patch: Partial<Pick<LeagueMembershipRow, 'status' | 'season_id'>>
 ): Promise<void> {
   const { error } = await supabase.from('league_memberships').update(patch).eq('id', id);
   if (error) throw error;

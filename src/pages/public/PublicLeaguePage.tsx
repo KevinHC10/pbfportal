@@ -1,9 +1,17 @@
+import * as React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Calendar, MapPin, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Tabs,
   TabsContent,
@@ -22,6 +30,7 @@ import {
   fetchPublicLeague,
   fetchPublicLeagueEvents,
   fetchPublicLeagueMemberships,
+  fetchPublicLeagueSeasons,
   fetchPublicSubLeagues,
 } from '@/lib/data/public';
 import { formatScheduleLine } from '@/lib/schedule';
@@ -49,6 +58,17 @@ export function PublicLeaguePage() {
     queryFn: () => fetchPublicSubLeagues(league!.id),
     enabled: Boolean(league?.id),
   });
+  const { data: seasons = [] } = useQuery({
+    queryKey: ['public-league-seasons', league?.id],
+    queryFn: () => fetchPublicLeagueSeasons(league!.id),
+    enabled: Boolean(league?.id),
+  });
+
+  const activeSeason = seasons.find((s) => s.status === 'active') ?? seasons[0] ?? null;
+  const [seasonId, setSeasonId] = React.useState<string>('');
+  React.useEffect(() => {
+    if (!seasonId && activeSeason) setSeasonId(activeSeason.id);
+  }, [activeSeason, seasonId]);
 
   if (isLoading) {
     return <Skeleton className="h-60" />;
@@ -63,8 +83,11 @@ export function PublicLeaguePage() {
     );
   }
 
-  const regulars = memberships.filter((m) => m.status === 'regular');
-  const guests = memberships.filter((m) => m.status === 'guest');
+  const filteredMemberships = seasonId
+    ? memberships.filter((m) => m.season_id === seasonId)
+    : memberships;
+  const regulars = filteredMemberships.filter((m) => m.status === 'regular');
+  const guests = filteredMemberships.filter((m) => m.status === 'guest');
   const schedule = formatScheduleLine(
     league.day_of_week,
     league.start_time_local,
@@ -92,6 +115,9 @@ export function PublicLeaguePage() {
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-2xl font-bold">{league.name}</h1>
             {league.acronym && <Badge variant="outline">{league.acronym}</Badge>}
+            {activeSeason && (
+              <Badge variant="success">Current: {activeSeason.name}</Badge>
+            )}
           </div>
           <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
             {league.center_name && (
@@ -108,7 +134,9 @@ export function PublicLeaguePage() {
             )}
             <span className="flex items-center gap-1">
               <Users className="h-4 w-4" />
-              {memberships.length} members
+              {filteredMemberships.length}
+              {seasonId && ' in selected season'}
+              {!seasonId && ' members'}
             </span>
           </div>
         </div>
@@ -124,9 +152,7 @@ export function PublicLeaguePage() {
 
       <Tabs defaultValue="members">
         <TabsList>
-          <TabsTrigger value="members">
-            Members ({memberships.length})
-          </TabsTrigger>
+          <TabsTrigger value="members">Members ({filteredMemberships.length})</TabsTrigger>
           <TabsTrigger value="events">Events ({events.length})</TabsTrigger>
           {subLeagues.length > 0 && (
             <TabsTrigger value="sub-leagues">Sub-leagues ({subLeagues.length})</TabsTrigger>
@@ -135,14 +161,34 @@ export function PublicLeaguePage() {
 
         <TabsContent value="members">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex-row items-center justify-between flex-wrap gap-2">
               <CardTitle className="text-lg">Roster</CardTitle>
+              {seasons.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Season</span>
+                  <Select value={seasonId} onValueChange={setSeasonId}>
+                    <SelectTrigger className="h-8 w-48">
+                      <SelectValue placeholder="All seasons" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {seasons.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                          {s.status === 'active' ? ' (active)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </CardHeader>
             <CardContent className="space-y-6">
               <MemberTable title="Regular" rows={regulars} />
               {guests.length > 0 && <MemberTable title="Guest" rows={guests} />}
-              {memberships.length === 0 && (
-                <p className="text-sm text-muted-foreground">No members listed yet.</p>
+              {filteredMemberships.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No members in this season.
+                </p>
               )}
             </CardContent>
           </Card>
@@ -158,23 +204,27 @@ export function PublicLeaguePage() {
                 <p className="text-sm text-muted-foreground">No events yet.</p>
               ) : (
                 <div className="space-y-2">
-                  {events.map((e) => (
-                    <Link
-                      key={e.id}
-                      to={`/e/${e.public_slug}`}
-                      className="flex items-center justify-between rounded-md border p-3 hover:bg-accent transition-colors"
-                    >
-                      <div>
-                        <div className="font-medium">{e.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {e.type} · {e.start_date}
+                  {events.map((e) => {
+                    const s = seasons.find((x) => x.id === e.season_id);
+                    return (
+                      <Link
+                        key={e.id}
+                        to={`/e/${e.public_slug}`}
+                        className="flex items-center justify-between rounded-md border p-3 hover:bg-accent transition-colors"
+                      >
+                        <div>
+                          <div className="font-medium">{e.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {e.type} · {e.start_date}
+                            {s ? ` · ${s.name}` : ''}
+                          </div>
                         </div>
-                      </div>
-                      <Badge variant="secondary" className="capitalize">
-                        {e.status}
-                      </Badge>
-                    </Link>
-                  ))}
+                        <Badge variant="secondary" className="capitalize">
+                          {e.status}
+                        </Badge>
+                      </Link>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -229,7 +279,10 @@ function MemberTable({
   rows,
 }: {
   title: string;
-  rows: Array<{ id: string; season_label: string; player: { full_name: string; home_average: number | null; affiliation: string | null } }>;
+  rows: Array<{
+    id: string;
+    player: { full_name: string; home_average: number | null; affiliation: string | null };
+  }>;
 }) {
   if (rows.length === 0) return null;
   return (
@@ -240,7 +293,6 @@ function MemberTable({
           <TableRow>
             <TableHead>Name</TableHead>
             <TableHead>Home avg</TableHead>
-            <TableHead>Season</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -249,9 +301,6 @@ function MemberTable({
               <TableCell className="font-medium">{m.player.full_name}</TableCell>
               <TableCell className="text-muted-foreground">
                 {m.player.home_average ?? '—'}
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {m.season_label || '—'}
               </TableCell>
             </TableRow>
           ))}

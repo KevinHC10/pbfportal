@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select';
 import { createEvent, getEvent, updateEvent } from '@/lib/data/events';
 import { listLeagues } from '@/lib/data/leagues';
+import { listSeasons } from '@/lib/data/seasons';
 import { computeHandicap, DEFAULT_HANDICAP_FORMULA } from '@/lib/handicap';
 
 const schema = z.object({
@@ -34,6 +35,7 @@ const schema = z.object({
   hdcp_max: z.coerce.number().int().min(0).max(300),
   hdcp_min: z.coerce.number().int().min(0).max(300),
   league_id: z.string().optional().or(z.literal('')),
+  season_id: z.string().optional().or(z.literal('')),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -68,6 +70,7 @@ export function EventEditorPage() {
       status: 'upcoming',
       total_games: 3,
       league_id: presetLeagueId,
+      season_id: '',
       hdcp_base: DEFAULT_HANDICAP_FORMULA.base,
       hdcp_factor: DEFAULT_HANDICAP_FORMULA.factor,
       hdcp_max: DEFAULT_HANDICAP_FORMULA.max,
@@ -89,8 +92,16 @@ export function EventEditorPage() {
       hdcp_max: existing.hdcp_max,
       hdcp_min: existing.hdcp_min,
       league_id: existing.league_id ?? '',
+      season_id: existing.season_id ?? '',
     });
   }
+
+  const selectedLeagueIdForSeasons = watch('league_id') ?? '';
+  const { data: seasonsForLeague = [] } = useQuery({
+    queryKey: ['league-seasons', selectedLeagueIdForSeasons],
+    queryFn: () => listSeasons(selectedLeagueIdForSeasons),
+    enabled: Boolean(selectedLeagueIdForSeasons),
+  });
 
   const selectedLeagueId = watch('league_id');
   const selectedLeague = leagues.find((l) => l.id === selectedLeagueId);
@@ -125,6 +136,7 @@ export function EventEditorPage() {
       hdcp_max: values.hdcp_max,
       hdcp_min: values.hdcp_min,
       league_id: values.league_id ? values.league_id : null,
+      season_id: values.season_id ? values.season_id : null,
     };
     try {
       if (isEdit && eventId) {
@@ -203,6 +215,37 @@ export function EventEditorPage() {
                   </p>
                 )}
               </div>
+
+              {selectedLeagueIdForSeasons && (
+                <div className="space-y-2">
+                  <Label>Season (optional)</Label>
+                  <Select
+                    value={watch('season_id') ?? ''}
+                    onValueChange={(v) =>
+                      setValue('season_id', v === 'none' ? '' : v, { shouldDirty: true })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="No season" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No season</SelectItem>
+                      {seasonsForLeague.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                          {s.status === 'active' ? ' (active)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {seasonsForLeague.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      This league has no seasons yet. Create one from the league detail
+                      page.
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="name">Name</Label>
