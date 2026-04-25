@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { generateNamedSlug } from '@/lib/utils';
 import type { EventPlayerRow, Handedness, PlayerRow } from '@/types/db';
 
 export interface PlayerInput {
@@ -29,7 +30,11 @@ export async function createPlayer(input: PlayerInput): Promise<PlayerRow> {
   if (!auth.user) throw new Error('Not authenticated');
   const { data, error } = await supabase
     .from('players')
-    .insert({ ...input, created_by: auth.user.id })
+    .insert({
+      ...input,
+      created_by: auth.user.id,
+      public_slug: generateNamedSlug(input.full_name),
+    })
     .select()
     .single();
   if (error) throw error;
