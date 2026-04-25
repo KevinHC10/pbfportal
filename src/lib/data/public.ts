@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import type {
+  AssociationRow,
   EventPlayerRow,
   EventRow,
   FrameRow,
@@ -79,6 +80,40 @@ export async function fetchPublicLeague(slug: string): Promise<LeagueRow | null>
     .maybeSingle();
   if (error) throw error;
   return data as LeagueRow | null;
+}
+
+export async function fetchPublicAssociation(slug: string): Promise<AssociationRow | null> {
+  const { data, error } = await supabase
+    .from('associations')
+    .select('*')
+    .eq('public_slug', slug)
+    .maybeSingle();
+  if (error) throw error;
+  return data as AssociationRow | null;
+}
+
+export async function fetchPublicAssociationLeagues(
+  associationId: string
+): Promise<LeagueRow[]> {
+  const { data, error } = await supabase
+    .from('leagues')
+    .select('*')
+    .eq('association_id', associationId)
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as LeagueRow[];
+}
+
+export async function fetchPublicAssociationById(
+  id: string
+): Promise<AssociationRow | null> {
+  const { data, error } = await supabase
+    .from('associations')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data as AssociationRow | null;
 }
 
 export async function fetchPublicLeagueById(id: string): Promise<LeagueRow | null> {

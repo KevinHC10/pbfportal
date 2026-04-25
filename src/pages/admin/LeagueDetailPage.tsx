@@ -47,10 +47,10 @@ import {
   addMembership,
   getLeague,
   listMemberships,
-  listSubLeagues,
   removeMembership,
   updateMembership,
 } from '@/lib/data/leagues';
+import { getAssociation } from '@/lib/data/associations';
 import {
   createSeason,
   deleteSeason,
@@ -60,6 +60,7 @@ import {
 import { listEventsByLeague } from '@/lib/data/events';
 import { listPlayers } from '@/lib/data/players';
 import { formatScheduleLine } from '@/lib/schedule';
+import { computeEventStatus } from '@/lib/event-status';
 import type { MembershipStatus, SeasonRow, SeasonStatus } from '@/types/db';
 
 const addMemberSchema = z.object({
@@ -96,10 +97,10 @@ export function LeagueDetailPage() {
     queryFn: () => listSeasons(leagueId!),
     enabled: Boolean(leagueId),
   });
-  const { data: subLeagues = [] } = useQuery({
-    queryKey: ['sub-leagues', leagueId],
-    queryFn: () => listSubLeagues(leagueId!),
-    enabled: Boolean(leagueId),
+  const { data: association } = useQuery({
+    queryKey: ['association', league?.association_id],
+    queryFn: () => getAssociation(league!.association_id!),
+    enabled: Boolean(league?.association_id),
   });
   const { data: events = [] } = useQuery({
     queryKey: ['league-events', leagueId],
@@ -190,6 +191,18 @@ export function LeagueDetailPage() {
             {league.center_name ? `${league.center_name} · ` : ''}
             {formatScheduleLine(league.day_of_week, league.start_time_local, league.timezone)}
           </p>
+          {association && (
+            <p className="text-sm text-muted-foreground mt-1">
+              Affiliated with{' '}
+              <Link
+                to={`/admin/associations/${association.id}`}
+                className="underline hover:text-foreground"
+              >
+                {association.name}
+                {association.acronym ? ` (${association.acronym})` : ''}
+              </Link>
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
           <Button asChild variant="outline" size="sm">
@@ -210,7 +223,6 @@ export function LeagueDetailPage() {
           <TabsTrigger value="members">Members</TabsTrigger>
           <TabsTrigger value="seasons">Seasons</TabsTrigger>
           <TabsTrigger value="events">Events</TabsTrigger>
-          <TabsTrigger value="sub-leagues">Sub-leagues</TabsTrigger>
         </TabsList>
 
         <TabsContent value="members">
@@ -455,6 +467,7 @@ export function LeagueDetailPage() {
                 <div className="space-y-2">
                   {events.map((e) => {
                     const s = seasons.find((x) => x.id === e.season_id);
+                    const derived = computeEventStatus(e);
                     return (
                       <Link
                         key={e.id}
@@ -465,10 +478,22 @@ export function LeagueDetailPage() {
                           <div className="font-medium">{e.name}</div>
                           <div className="text-xs text-muted-foreground">
                             {e.type} · {e.start_date}
+                            {e.start_time ? ` ${e.start_time.slice(0, 5)}` : ''}
                             {s ? ` · ${s.name}` : ''}
                           </div>
                         </div>
-                        <Badge variant="secondary">{e.status}</Badge>
+                        <Badge
+                          variant={
+                            derived === 'active'
+                              ? 'success'
+                              : derived === 'upcoming'
+                                ? 'outline'
+                                : 'secondary'
+                          }
+                          className="capitalize"
+                        >
+                          {derived}
+                        </Badge>
                       </Link>
                     );
                   })}
@@ -478,42 +503,6 @@ export function LeagueDetailPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="sub-leagues">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Sub-leagues ({subLeagues.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {subLeagues.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No sub-leagues yet. Create a new league and set this one as its parent.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {subLeagues.map((sl) => (
-                    <Link
-                      key={sl.id}
-                      to={`/admin/leagues/${sl.id}`}
-                      className="flex items-center justify-between rounded-md border p-3 hover:bg-accent transition-colors"
-                    >
-                      <div>
-                        <div className="font-medium">{sl.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {sl.acronym ?? ''}{' '}
-                          {formatScheduleLine(
-                            sl.day_of_week,
-                            sl.start_time_local,
-                            sl.timezone
-                          )}
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   );

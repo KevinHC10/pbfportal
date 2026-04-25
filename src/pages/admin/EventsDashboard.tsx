@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { listEvents } from '@/lib/data/events';
+import { computeEventStatus } from '@/lib/event-status';
 import type { EventStatus, EventType } from '@/types/db';
 import * as React from 'react';
 
@@ -24,7 +25,7 @@ export function EventsDashboard() {
 
   const events = (data ?? []).filter((e) => {
     if (typeFilter !== 'all' && e.type !== typeFilter) return false;
-    if (statusFilter !== 'all' && e.status !== statusFilter) return false;
+    if (statusFilter !== 'all' && computeEventStatus(e) !== statusFilter) return false;
     return true;
   });
 
@@ -88,13 +89,15 @@ export function EventsDashboard() {
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {events.map((e) => (
+          {events.map((e) => {
+            const derived = computeEventStatus(e);
+            return (
             <Link key={e.id} to={`/admin/events/${e.id}`}>
               <Card className="h-full transition-shadow hover:shadow-md">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-2">
                     <CardTitle className="text-base">{e.name}</CardTitle>
-                    <Badge variant={STATUS_VARIANT[e.status]}>{e.status}</Badge>
+                    <Badge variant={STATUS_VARIANT[derived]}>{derived}</Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-1 text-sm text-muted-foreground">
@@ -111,7 +114,8 @@ export function EventsDashboard() {
                 </CardContent>
               </Card>
             </Link>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

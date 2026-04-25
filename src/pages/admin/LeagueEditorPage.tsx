@@ -20,16 +20,16 @@ import {
 import {
   createLeague,
   getLeague,
-  listLeagues,
   updateLeague,
 } from '@/lib/data/leagues';
+import { listAssociations } from '@/lib/data/associations';
 import { DAY_NAMES } from '@/lib/schedule';
 import { DEFAULT_HANDICAP_FORMULA, computeHandicap } from '@/lib/handicap';
 
 const schema = z.object({
   name: z.string().min(2).max(120),
   acronym: z.string().max(30).optional().or(z.literal('')),
-  parent_league_id: z.string().optional().or(z.literal('')),
+  association_id: z.string().optional().or(z.literal('')),
   center_name: z.string().max(120).optional().or(z.literal('')),
   day_of_week: z.string().optional().or(z.literal('')), // store as string, coerce on submit
   start_time_local: z.string().optional().or(z.literal('')),
@@ -58,9 +58,9 @@ export function LeagueEditorPage() {
     enabled: isEdit,
   });
 
-  const { data: allLeagues = [] } = useQuery({
-    queryKey: ['leagues'],
-    queryFn: listLeagues,
+  const { data: associations = [] } = useQuery({
+    queryKey: ['associations'],
+    queryFn: listAssociations,
   });
 
   const {
@@ -85,7 +85,7 @@ export function LeagueEditorPage() {
     reset({
       name: existing.name,
       acronym: existing.acronym ?? '',
-      parent_league_id: existing.parent_league_id ?? '',
+      association_id: existing.association_id ?? '',
       center_name: existing.center_name ?? '',
       day_of_week: existing.day_of_week != null ? String(existing.day_of_week) : '',
       start_time_local: existing.start_time_local ?? '',
@@ -104,7 +104,7 @@ export function LeagueEditorPage() {
     const payload = {
       name: values.name,
       acronym: values.acronym ? values.acronym : null,
-      parent_league_id: values.parent_league_id ? values.parent_league_id : null,
+      association_id: values.association_id ? values.association_id : null,
       center_name: values.center_name ? values.center_name : null,
       day_of_week:
         values.day_of_week !== '' && values.day_of_week != null
@@ -150,8 +150,6 @@ export function LeagueEditorPage() {
     160
   );
 
-  const parentCandidates = allLeagues.filter((l) => l.id !== leagueId);
-
   return (
     <div className="max-w-3xl mx-auto space-y-4">
       <Button asChild variant="ghost" size="sm">
@@ -191,25 +189,35 @@ export function LeagueEditorPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Parent league (optional)</Label>
+                <Label>Association (optional)</Label>
                 <Select
-                  value={watch('parent_league_id') ?? ''}
+                  value={watch('association_id') ?? ''}
                   onValueChange={(v) =>
-                    setValue('parent_league_id', v === 'none' ? '' : v, { shouldDirty: true })
+                    setValue('association_id', v === 'none' ? '' : v, { shouldDirty: true })
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="None" />
+                    <SelectValue placeholder="Independent" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {parentCandidates.map((l) => (
-                      <SelectItem key={l.id} value={l.id}>
-                        {l.name}
+                    <SelectItem value="none">Independent</SelectItem>
+                    {associations.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name}
+                        {a.acronym ? ` (${a.acronym})` : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {associations.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No associations yet. Create one in the{' '}
+                    <Link to="/admin/associations" className="underline">
+                      Associations
+                    </Link>{' '}
+                    section to affiliate this league.
+                  </p>
+                )}
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">

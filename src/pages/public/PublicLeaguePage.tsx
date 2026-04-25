@@ -27,13 +27,14 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
+  fetchPublicAssociationById,
   fetchPublicLeague,
   fetchPublicLeagueEvents,
   fetchPublicLeagueMemberships,
   fetchPublicLeagueSeasons,
-  fetchPublicSubLeagues,
 } from '@/lib/data/public';
 import { formatScheduleLine } from '@/lib/schedule';
+import { computeEventStatus } from '@/lib/event-status';
 
 export function PublicLeaguePage() {
   const { slug } = useParams();
@@ -53,10 +54,10 @@ export function PublicLeaguePage() {
     queryFn: () => fetchPublicLeagueEvents(league!.id),
     enabled: Boolean(league?.id),
   });
-  const { data: subLeagues = [] } = useQuery({
-    queryKey: ['public-sub-leagues', league?.id],
-    queryFn: () => fetchPublicSubLeagues(league!.id),
-    enabled: Boolean(league?.id),
+  const { data: association } = useQuery({
+    queryKey: ['public-association-by-id', league?.association_id],
+    queryFn: () => fetchPublicAssociationById(league!.association_id!),
+    enabled: Boolean(league?.association_id),
   });
   const { data: seasons = [] } = useQuery({
     queryKey: ['public-league-seasons', league?.id],
@@ -119,6 +120,18 @@ export function PublicLeaguePage() {
               <Badge variant="success">Current: {activeSeason.name}</Badge>
             )}
           </div>
+          {association && (
+            <p className="text-sm text-muted-foreground">
+              Affiliated with{' '}
+              <Link
+                to={`/associations/${association.public_slug}`}
+                className="underline hover:text-foreground"
+              >
+                {association.name}
+                {association.acronym ? ` (${association.acronym})` : ''}
+              </Link>
+            </p>
+          )}
           <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
             {league.center_name && (
               <span className="flex items-center gap-1">
@@ -154,9 +167,6 @@ export function PublicLeaguePage() {
         <TabsList>
           <TabsTrigger value="members">Members ({filteredMemberships.length})</TabsTrigger>
           <TabsTrigger value="events">Events ({events.length})</TabsTrigger>
-          {subLeagues.length > 0 && (
-            <TabsTrigger value="sub-leagues">Sub-leagues ({subLeagues.length})</TabsTrigger>
-          )}
         </TabsList>
 
         <TabsContent value="members">
@@ -206,6 +216,7 @@ export function PublicLeaguePage() {
                 <div className="space-y-2">
                   {events.map((e) => {
                     const s = seasons.find((x) => x.id === e.season_id);
+                    const derived = computeEventStatus(e);
                     return (
                       <Link
                         key={e.id}
@@ -216,11 +227,21 @@ export function PublicLeaguePage() {
                           <div className="font-medium">{e.name}</div>
                           <div className="text-xs text-muted-foreground">
                             {e.type} · {e.start_date}
+                            {e.start_time ? ` ${e.start_time.slice(0, 5)}` : ''}
                             {s ? ` · ${s.name}` : ''}
                           </div>
                         </div>
-                        <Badge variant="secondary" className="capitalize">
-                          {e.status}
+                        <Badge
+                          variant={
+                            derived === 'active'
+                              ? 'success'
+                              : derived === 'upcoming'
+                                ? 'outline'
+                                : 'secondary'
+                          }
+                          className="capitalize"
+                        >
+                          {derived}
                         </Badge>
                       </Link>
                     );
@@ -231,44 +252,6 @@ export function PublicLeaguePage() {
           </Card>
         </TabsContent>
 
-        {subLeagues.length > 0 && (
-          <TabsContent value="sub-leagues">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Sub-leagues</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {subLeagues.map((sl) => (
-                    <Link
-                      key={sl.id}
-                      to={`/leagues/${sl.public_slug}`}
-                      className="flex items-center justify-between rounded-md border p-3 hover:bg-accent transition-colors"
-                    >
-                      <div>
-                        <div className="font-medium">
-                          {sl.name}
-                          {sl.acronym && (
-                            <Badge variant="outline" className="ml-2">
-                              {sl.acronym}
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {formatScheduleLine(
-                            sl.day_of_week,
-                            sl.start_time_local,
-                            sl.timezone
-                          )}
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
       </Tabs>
     </div>
   );

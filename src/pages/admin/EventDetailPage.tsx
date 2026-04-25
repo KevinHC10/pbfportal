@@ -60,6 +60,7 @@ import {
 } from '@/lib/data/players';
 import { createSession, listSessions } from '@/lib/data/sessions';
 import { computeHandicap } from '@/lib/handicap';
+import { computeEventStatus } from '@/lib/event-status';
 
 const playerSchema = z.object({
   full_name: z.string().min(2, 'Name is required').max(120),
@@ -207,7 +208,9 @@ export function EventDetailPage() {
             <Badge variant="outline" className="capitalize">
               {event.type}
             </Badge>
-            <Badge variant="secondary">{event.status}</Badge>
+            <Badge variant="secondary" className="capitalize">
+              {computeEventStatus(event)}
+            </Badge>
           </div>
           <p className="text-sm text-muted-foreground">
             {event.center_name ? `${event.center_name} · ` : ''}

@@ -16,6 +16,7 @@ import {
   fetchSessionWithGames,
 } from '@/lib/data/public';
 import { useEventRealtime } from '@/hooks/useEventRealtime';
+import { computeEventStatus } from '@/lib/event-status';
 
 export function PublicSessionPage() {
   const { slug, sessionId } = useParams();
@@ -64,7 +65,7 @@ export function PublicSessionPage() {
         <Badge variant="secondary">
           {format(new Date(data.session.session_date), 'EEE, MMM d, yyyy')}
         </Badge>
-        {event.status === 'active' && live && (
+        {computeEventStatus(event) === 'active' && live && (
           <Badge variant="live" className="animate-pulse-live">
             ● LIVE
           </Badge>
