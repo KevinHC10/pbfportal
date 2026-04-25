@@ -17,6 +17,7 @@ import {
 } from '@/lib/data/public';
 import { useEventRealtime } from '@/hooks/useEventRealtime';
 import { downloadStandingsCsv } from '@/lib/export/csv';
+import { computeEventStatus, formatStartMoment } from '@/lib/event-status';
 
 export function PublicEventPage() {
   const { slug } = useParams();
@@ -75,6 +76,8 @@ export function PublicEventPage() {
     );
   }
 
+  const derivedStatus = computeEventStatus(event);
+
   return (
     <div className="space-y-6">
       <header className="space-y-2">
@@ -84,9 +87,9 @@ export function PublicEventPage() {
             {event.type}
           </Badge>
           <Badge variant="secondary" className="capitalize">
-            {event.status}
+            {derivedStatus}
           </Badge>
-          {event.status === 'active' && live && (
+          {derivedStatus === 'active' && live && (
             <Badge variant="live" className="animate-pulse-live">
               ● LIVE
             </Badge>
@@ -104,7 +107,7 @@ export function PublicEventPage() {
         <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
           <span className="flex items-center gap-1">
             <Calendar className="h-4 w-4" />
-            {format(new Date(event.start_date), 'MMM d, yyyy')}
+            {formatStartMoment(event)}
             {event.end_date ? ` → ${format(new Date(event.end_date), 'MMM d, yyyy')}` : ''}
           </span>
           {event.center_name && (

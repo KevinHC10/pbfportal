@@ -26,8 +26,8 @@ const schema = z.object({
   name: z.string().min(2, 'Name is required').max(120),
   type: z.enum(['league', 'tournament']),
   start_date: z.string().min(1, 'Start date is required'),
+  start_time: z.string().optional().or(z.literal('')),
   end_date: z.string().optional().or(z.literal('')),
-  status: z.enum(['upcoming', 'active', 'completed']),
   center_name: z.string().optional().or(z.literal('')),
   total_games: z.coerce.number().int().min(1).max(20),
   hdcp_base: z.coerce.number().int().min(100).max(300),
@@ -67,10 +67,10 @@ export function EventEditorPage() {
     resolver: zodResolver(schema),
     defaultValues: {
       type: 'league',
-      status: 'upcoming',
       total_games: 3,
       league_id: presetLeagueId,
       season_id: '',
+      start_time: '',
       hdcp_base: DEFAULT_HANDICAP_FORMULA.base,
       hdcp_factor: DEFAULT_HANDICAP_FORMULA.factor,
       hdcp_max: DEFAULT_HANDICAP_FORMULA.max,
@@ -83,8 +83,8 @@ export function EventEditorPage() {
       name: existing.name,
       type: existing.type,
       start_date: existing.start_date,
+      start_time: existing.start_time ? existing.start_time.slice(0, 5) : '',
       end_date: existing.end_date ?? '',
-      status: existing.status,
       center_name: existing.center_name ?? '',
       total_games: existing.total_games,
       hdcp_base: existing.hdcp_base,
@@ -127,8 +127,11 @@ export function EventEditorPage() {
       name: values.name,
       type: values.type,
       start_date: values.start_date,
+      start_time: values.start_time ? values.start_time : null,
       end_date: values.end_date ? values.end_date : null,
-      status: values.status,
+      // Status is derived from date+time at display time. We default to 'upcoming'
+      // as a column-level fallback for older clients / direct DB reads.
+      status: 'upcoming' as const,
       center_name: values.center_name ? values.center_name : null,
       total_games: values.total_games,
       hdcp_base: values.hdcp_base,
@@ -255,51 +258,40 @@ export function EventEditorPage() {
                 )}
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Type</Label>
-                  <Select
-                    value={watch('type')}
-                    onValueChange={(v) =>
-                      setValue('type', v as 'league' | 'tournament', { shouldDirty: true })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="league">League</SelectItem>
-                      <SelectItem value="tournament">Tournament</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select
-                    value={watch('status')}
-                    onValueChange={(v) =>
-                      setValue('status', v as FormValues['status'], { shouldDirty: true })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="upcoming">Upcoming</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label>Type</Label>
+                <Select
+                  value={watch('type')}
+                  onValueChange={(v) =>
+                    setValue('type', v as 'league' | 'tournament', { shouldDirty: true })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="league">League</SelectItem>
+                    <SelectItem value="tournament">Tournament</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Status is derived automatically from the date + start time:{' '}
+                  <strong>upcoming</strong> before the start moment,{' '}
+                  <strong>active</strong> during, <strong>completed</strong> after.
+                </p>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
                   <Label htmlFor="start_date">Start date</Label>
                   <Input id="start_date" type="date" {...register('start_date')} />
                   {errors.start_date && (
                     <p className="text-sm text-destructive">{errors.start_date.message}</p>
                   )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="start_time">Start time</Label>
+                  <Input id="start_time" type="time" {...register('start_time')} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="end_date">End date (optional)</Label>

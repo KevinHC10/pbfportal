@@ -7,6 +7,7 @@ export interface EventRow {
   name: string;
   type: EventType;
   start_date: string;
+  start_time: string | null;
   end_date: string | null;
   status: EventStatus;
   public_slug: string;
@@ -23,13 +24,26 @@ export interface EventRow {
   updated_at: string;
 }
 
+export interface AssociationRow {
+  id: string;
+  name: string;
+  acronym: string | null;
+  image_url: string | null;
+  description: string | null;
+  public_slug: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface LeagueRow {
   id: string;
   name: string;
   acronym: string | null;
-  parent_league_id: string | null;
+  parent_league_id: string | null; // legacy; unused in UI from v7
+  association_id: string | null;
   center_name: string | null;
   day_of_week: DayOfWeek | null;
   start_time_local: string | null; // "HH:MM:SS"

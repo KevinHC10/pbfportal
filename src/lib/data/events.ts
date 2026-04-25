@@ -6,6 +6,7 @@ export interface EventInput {
   name: string;
   type: EventType;
   start_date: string;
+  start_time?: string | null;
   end_date: string | null;
   status: EventStatus;
   center_name: string | null;

@@ -10,11 +10,15 @@ import { PlayersPage } from '@/pages/admin/PlayersPage';
 import { LeaguesDashboard } from '@/pages/admin/LeaguesDashboard';
 import { LeagueEditorPage } from '@/pages/admin/LeagueEditorPage';
 import { LeagueDetailPage } from '@/pages/admin/LeagueDetailPage';
+import { AssociationsDashboard } from '@/pages/admin/AssociationsDashboard';
+import { AssociationEditorPage } from '@/pages/admin/AssociationEditorPage';
+import { AssociationDetailPage } from '@/pages/admin/AssociationDetailPage';
 import { PublicEventPage } from '@/pages/public/PublicEventPage';
 import { PublicPlayerPage } from '@/pages/public/PublicPlayerPage';
 import { PublicPlayerProfilePage } from '@/pages/public/PublicPlayerProfilePage';
 import { PublicSessionPage } from '@/pages/public/PublicSessionPage';
 import { PublicLeaguePage } from '@/pages/public/PublicLeaguePage';
+import { PublicAssociationPage } from '@/pages/public/PublicAssociationPage';
 import { LandingPage } from '@/pages/public/LandingPage';
 
 export default function App() {
@@ -23,6 +27,7 @@ export default function App() {
       <Route element={<PublicShell />}>
         <Route index element={<LandingPage />} />
         <Route path="/leagues/:slug" element={<PublicLeaguePage />} />
+        <Route path="/associations/:slug" element={<PublicAssociationPage />} />
         <Route path="/players/:slug" element={<PublicPlayerProfilePage />} />
         <Route path="/e/:slug" element={<PublicEventPage />} />
         <Route path="/e/:slug/players/:playerId" element={<PublicPlayerPage />} />
@@ -48,6 +53,13 @@ export default function App() {
         <Route path="/admin/leagues/new" element={<LeagueEditorPage />} />
         <Route path="/admin/leagues/:leagueId" element={<LeagueDetailPage />} />
         <Route path="/admin/leagues/:leagueId/edit" element={<LeagueEditorPage />} />
+        <Route path="/admin/associations" element={<AssociationsDashboard />} />
+        <Route path="/admin/associations/new" element={<AssociationEditorPage />} />
+        <Route path="/admin/associations/:associationId" element={<AssociationDetailPage />} />
+        <Route
+          path="/admin/associations/:associationId/edit"
+          element={<AssociationEditorPage />}
+        />
         <Route path="/admin/players" element={<PlayersPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

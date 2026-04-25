@@ -1,6 +1,15 @@
 import * as React from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Trophy, Users, LayoutDashboard, LogOut, Moon, Sun, Flag } from 'lucide-react';
+import {
+  Building2,
+  Flag,
+  LayoutDashboard,
+  LogOut,
+  Moon,
+  Sun,
+  Trophy,
+  Users,
+} from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -24,6 +33,9 @@ export function AppShell() {
             </NavItem>
             <NavItem to="/admin/leagues" icon={<Flag className="h-4 w-4" />}>
               Leagues
+            </NavItem>
+            <NavItem to="/admin/associations" icon={<Building2 className="h-4 w-4" />}>
+              Associations
             </NavItem>
             <NavItem to="/admin/players" icon={<Users className="h-4 w-4" />}>
               Players

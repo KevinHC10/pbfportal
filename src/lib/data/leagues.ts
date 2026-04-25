@@ -12,7 +12,8 @@ import type {
 export interface LeagueInput {
   name: string;
   acronym?: string | null;
-  parent_league_id?: string | null;
+  parent_league_id?: string | null; // legacy; new code uses association_id
+  association_id?: string | null;
   center_name?: string | null;
   day_of_week?: DayOfWeek | null;
   start_time_local?: string | null;
@@ -49,16 +50,6 @@ export async function getLeagueBySlug(slug: string): Promise<LeagueRow | null> {
     .maybeSingle();
   if (error) throw error;
   return data as LeagueRow | null;
-}
-
-export async function listSubLeagues(parentId: string): Promise<LeagueRow[]> {
-  const { data, error } = await supabase
-    .from('leagues')
-    .select('*')
-    .eq('parent_league_id', parentId)
-    .order('name', { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as LeagueRow[];
 }
 
 export async function createLeague(input: LeagueInput): Promise<LeagueRow> {
