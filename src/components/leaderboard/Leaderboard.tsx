@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -25,7 +25,6 @@ interface Props {
 
 export function Leaderboard({ eventPlayers, games, frames }: Props) {
   const [sort, setSort] = React.useState<LeaderboardSort>('scratchSeries');
-  const { slug } = useParams();
   const rows = React.useMemo(
     () => sortLeaderboard(buildLeaderboard(eventPlayers, games, frames), sort),
     [eventPlayers, games, frames, sort]
@@ -63,10 +62,7 @@ export function Leaderboard({ eventPlayers, games, frames }: Props) {
               <TableRow key={r.eventPlayerId}>
                 <TableCell className="text-muted-foreground tabular-nums">{idx + 1}</TableCell>
                 <TableCell className="font-medium">
-                  <Link
-                    to={`/e/${slug}/players/${r.playerId}`}
-                    className="hover:underline"
-                  >
+                  <Link to={`/players/${r.playerSlug}`} className="hover:underline">
                     {r.playerName}
                   </Link>
                   {idx === 0 && r.gamesPlayed > 0 && (

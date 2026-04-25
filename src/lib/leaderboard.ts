@@ -13,6 +13,7 @@ import type {
 export interface LeaderboardRow {
   eventPlayerId: string;
   playerId: string;
+  playerSlug: string;
   playerName: string;
   affiliation: string | null;
   handicap: number;
@@ -51,6 +52,7 @@ export function buildLeaderboard(
     return {
       eventPlayerId: ep.id,
       playerId: ep.player_id,
+      playerSlug: ep.player.public_slug,
       playerName: ep.player.full_name,
       affiliation: ep.player.affiliation ?? null,
       handicap: ep.handicap,
@@ -108,6 +110,7 @@ export function sortLeaderboard(
 export interface SessionLeaderboardRow {
   eventPlayerId: string;
   playerId: string;
+  playerSlug: string;
   playerName: string;
   affiliation: string | null;
   average: number | null;     // running average across the whole event so far
@@ -189,6 +192,7 @@ export function buildSessionLeaderboard({
     return {
       eventPlayerId: ep.id,
       playerId: ep.player_id,
+      playerSlug: ep.player.public_slug,
       playerName: ep.player.full_name,
       affiliation: ep.player.affiliation ?? null,
       average: runningAverage ?? null,

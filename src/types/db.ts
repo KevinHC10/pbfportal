@@ -109,6 +109,7 @@ export interface PlayerRow {
   handedness: Handedness | null;
   home_average: number | null;
   affiliation: string | null;
+  public_slug: string;
   created_by: string;
   created_at: string;
 }

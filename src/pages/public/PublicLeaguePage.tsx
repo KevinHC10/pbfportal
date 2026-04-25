@@ -281,7 +281,12 @@ function MemberTable({
   title: string;
   rows: Array<{
     id: string;
-    player: { full_name: string; home_average: number | null; affiliation: string | null };
+    player: {
+      full_name: string;
+      home_average: number | null;
+      affiliation: string | null;
+      public_slug: string;
+    };
   }>;
 }) {
   if (rows.length === 0) return null;
@@ -298,7 +303,11 @@ function MemberTable({
         <TableBody>
           {rows.map((m) => (
             <TableRow key={m.id}>
-              <TableCell className="font-medium">{m.player.full_name}</TableCell>
+              <TableCell className="font-medium">
+                <Link to={`/players/${m.player.public_slug}`} className="hover:underline">
+                  {m.player.full_name}
+                </Link>
+              </TableCell>
               <TableCell className="text-muted-foreground">
                 {m.player.home_average ?? '—'}
               </TableCell>

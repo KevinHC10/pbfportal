@@ -135,6 +135,48 @@ export async function fetchPublicSubLeagues(parentId: string): Promise<LeagueRow
   return (data ?? []) as LeagueRow[];
 }
 
+export async function fetchPublicPlayerBySlug(slug: string): Promise<PlayerRow | null> {
+  const { data, error } = await supabase
+    .from('players')
+    .select('*')
+    .eq('public_slug', slug)
+    .maybeSingle();
+  if (error) throw error;
+  return data as PlayerRow | null;
+}
+
+export interface PlayerLeagueMembership extends LeagueMembershipRow {
+  league: LeagueRow;
+  season: SeasonRow | null;
+}
+
+export async function fetchPublicPlayerMemberships(
+  playerId: string
+): Promise<PlayerLeagueMembership[]> {
+  const { data, error } = await supabase
+    .from('league_memberships')
+    .select('*, league:leagues(*), season:seasons(*)')
+    .eq('player_id', playerId);
+  if (error) throw error;
+  return (data ?? []) as PlayerLeagueMembership[];
+}
+
+export interface PlayerEventParticipation extends EventPlayerRow {
+  event: EventRow;
+  games: GameRow[];
+}
+
+export async function fetchPublicPlayerParticipation(
+  playerId: string
+): Promise<PlayerEventParticipation[]> {
+  const { data, error } = await supabase
+    .from('event_players')
+    .select('*, event:events(*), games:games(*)')
+    .eq('player_id', playerId);
+  if (error) throw error;
+  return (data ?? []) as PlayerEventParticipation[];
+}
+
 export async function fetchPublicSessionLaneAssignments(
   sessionId: string
 ): Promise<SessionLaneAssignmentRow[]> {

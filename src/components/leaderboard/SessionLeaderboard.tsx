@@ -123,7 +123,7 @@ export function SessionLeaderboard({
                   <TableCell className="font-medium">
                     {publicSlug ? (
                       <Link
-                        to={`/e/${publicSlug}/players/${r.playerId}`}
+                        to={`/players/${r.playerSlug}`}
                         onClick={(e) => e.stopPropagation()}
                         className="hover:underline"
                       >

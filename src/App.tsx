@@ -12,6 +12,7 @@ import { LeagueEditorPage } from '@/pages/admin/LeagueEditorPage';
 import { LeagueDetailPage } from '@/pages/admin/LeagueDetailPage';
 import { PublicEventPage } from '@/pages/public/PublicEventPage';
 import { PublicPlayerPage } from '@/pages/public/PublicPlayerPage';
+import { PublicPlayerProfilePage } from '@/pages/public/PublicPlayerProfilePage';
 import { PublicSessionPage } from '@/pages/public/PublicSessionPage';
 import { PublicLeaguePage } from '@/pages/public/PublicLeaguePage';
 import { LandingPage } from '@/pages/public/LandingPage';
@@ -22,6 +23,7 @@ export default function App() {
       <Route element={<PublicShell />}>
         <Route index element={<LandingPage />} />
         <Route path="/leagues/:slug" element={<PublicLeaguePage />} />
+        <Route path="/players/:slug" element={<PublicPlayerProfilePage />} />
         <Route path="/e/:slug" element={<PublicEventPage />} />
         <Route path="/e/:slug/players/:playerId" element={<PublicPlayerPage />} />
         <Route path="/e/:slug/sessions/:sessionId" element={<PublicSessionPage />} />

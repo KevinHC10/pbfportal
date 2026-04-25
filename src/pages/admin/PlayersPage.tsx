@@ -1,5 +1,6 @@
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Users } from 'lucide-react';
+import { ExternalLink, Users } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -48,16 +49,32 @@ export function PlayersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
+                  <TableHead>Affiliation</TableHead>
                   <TableHead>Handedness</TableHead>
                   <TableHead>Home avg</TableHead>
+                  <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data.map((p) => (
                   <TableRow key={p.id}>
-                    <TableCell className="font-medium">{p.full_name}</TableCell>
+                    <TableCell className="font-medium">
+                      <Link to={`/players/${p.public_slug}`} className="hover:underline">
+                        {p.full_name}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{p.affiliation ?? '—'}</TableCell>
                     <TableCell className="capitalize">{p.handedness ?? '—'}</TableCell>
                     <TableCell>{p.home_average ?? '—'}</TableCell>
+                    <TableCell>
+                      <Link
+                        to={`/players/${p.public_slug}`}
+                        className="text-muted-foreground hover:text-foreground"
+                        aria-label={`Open ${p.full_name} profile`}
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Link>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
