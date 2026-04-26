@@ -1,11 +1,10 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { AppShell, PublicShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { EventsDashboard } from '@/pages/admin/EventsDashboard';
 import { EventEditorPage } from '@/pages/admin/EventEditorPage';
 import { EventDetailPage } from '@/pages/admin/EventDetailPage';
-import { SessionScorePage } from '@/pages/admin/SessionScorePage';
 import { PlayersPage } from '@/pages/admin/PlayersPage';
 import { LeaguesDashboard } from '@/pages/admin/LeaguesDashboard';
 import { LeagueEditorPage } from '@/pages/admin/LeagueEditorPage';
@@ -16,10 +15,18 @@ import { AssociationDetailPage } from '@/pages/admin/AssociationDetailPage';
 import { PublicEventPage } from '@/pages/public/PublicEventPage';
 import { PublicPlayerPage } from '@/pages/public/PublicPlayerPage';
 import { PublicPlayerProfilePage } from '@/pages/public/PublicPlayerProfilePage';
-import { PublicSessionPage } from '@/pages/public/PublicSessionPage';
 import { PublicLeaguePage } from '@/pages/public/PublicLeaguePage';
 import { PublicAssociationPage } from '@/pages/public/PublicAssociationPage';
 import { LandingPage } from '@/pages/public/LandingPage';
+
+// Sessions were removed in v8. Old bookmarks pointing at .../sessions/:id
+// redirect back to the event page now.
+function RedirectToEvent() {
+  const { eventId, slug } = useParams();
+  if (eventId) return <Navigate to={`/admin/events/${eventId}`} replace />;
+  if (slug) return <Navigate to={`/e/${slug}`} replace />;
+  return <Navigate to="/" replace />;
+}
 
 export default function App() {
   return (
@@ -31,7 +38,7 @@ export default function App() {
         <Route path="/players/:slug" element={<PublicPlayerProfilePage />} />
         <Route path="/e/:slug" element={<PublicEventPage />} />
         <Route path="/e/:slug/players/:playerId" element={<PublicPlayerPage />} />
-        <Route path="/e/:slug/sessions/:sessionId" element={<PublicSessionPage />} />
+        <Route path="/e/:slug/sessions/:sessionId" element={<RedirectToEvent />} />
       </Route>
       <Route path="/login" element={<LoginPage />} />
       <Route
@@ -47,7 +54,7 @@ export default function App() {
         <Route path="/admin/events/:eventId/edit" element={<EventEditorPage />} />
         <Route
           path="/admin/events/:eventId/sessions/:sessionId"
-          element={<SessionScorePage />}
+          element={<RedirectToEvent />}
         />
         <Route path="/admin/leagues" element={<LeaguesDashboard />} />
         <Route path="/admin/leagues/new" element={<LeagueEditorPage />} />

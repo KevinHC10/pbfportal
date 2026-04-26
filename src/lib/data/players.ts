@@ -61,11 +61,17 @@ export async function listEventPlayers(
 export async function addPlayerToEvent(
   eventId: string,
   playerId: string,
-  handicap = 0
+  handicap = 0,
+  isPlaying = true
 ): Promise<EventPlayerRow> {
   const { data, error } = await supabase
     .from('event_players')
-    .insert({ event_id: eventId, player_id: playerId, handicap })
+    .insert({
+      event_id: eventId,
+      player_id: playerId,
+      handicap,
+      is_playing: isPlaying,
+    })
     .select()
     .single();
   if (error) throw error;
@@ -74,7 +80,7 @@ export async function addPlayerToEvent(
 
 export async function updateEventPlayer(
   id: string,
-  patch: Partial<Pick<EventPlayerRow, 'handicap' | 'lane_number'>>
+  patch: Partial<Pick<EventPlayerRow, 'handicap' | 'lane_number' | 'is_playing'>>
 ) {
   const { error } = await supabase.from('event_players').update(patch).eq('id', id);
   if (error) throw error;

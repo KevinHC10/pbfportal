@@ -17,36 +17,39 @@ import {
 } from '@/lib/leaderboard';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type {
+  EventLaneAssignmentRow,
   EventPlayerRow,
   EventRow,
   GameRow,
+  MembershipStatus,
   PlayerRow,
-  SessionLaneAssignmentRow,
-  SessionRow,
 } from '@/types/db';
 
 interface Props {
   event: EventRow;
-  session: SessionRow;
   eventPlayers: Array<EventPlayerRow & { player: PlayerRow }>;
   allEventGames: GameRow[];
   sessionGames: GameRow[];
-  laneAssignments?: SessionLaneAssignmentRow[];
+  laneAssignments?: EventLaneAssignmentRow[];
+  membershipByPlayerId?: Map<string, MembershipStatus>;
   /** If provided, each row becomes a button that opens the editor for that player. */
   onRowClick?: (eventPlayerId: string) => void;
   /** Link each player name to their public profile under this slug. If absent, not clickable. */
   publicSlug?: string;
+  /** Title text to show above the table. Defaults to "Standings". */
+  title?: string;
 }
 
 export function SessionLeaderboard({
   event,
-  session,
   eventPlayers,
   allEventGames,
   sessionGames,
   laneAssignments,
+  membershipByPlayerId,
   onRowClick,
   publicSlug,
+  title = 'Standings',
 }: Props) {
   const [sort, setSort] = React.useState<SessionLeaderboardSort>('totalWithHdcp');
   const rows = React.useMemo(
@@ -58,19 +61,26 @@ export function SessionLeaderboard({
           sessionGames,
           totalGames: event.total_games,
           laneAssignments,
+          membershipByPlayerId,
         }),
         sort
-      ),
-    [eventPlayers, allEventGames, sessionGames, event.total_games, laneAssignments, sort]
+      ).filter((r) => r.isPlaying),
+    [
+      eventPlayers,
+      allEventGames,
+      sessionGames,
+      event.total_games,
+      laneAssignments,
+      membershipByPlayerId,
+      sort,
+    ]
   );
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-lg font-semibold">
-            Session {session.session_number} standings
-          </h2>
+          <h2 className="text-lg font-semibold">{title}</h2>
           <p className="text-xs text-muted-foreground">
             {onRowClick ? 'Click a row to edit a bowler’s games.' : 'Live scoresheet.'}
           </p>
@@ -131,6 +141,16 @@ export function SessionLeaderboard({
                       </Link>
                     ) : (
                       r.playerName
+                    )}
+                    {r.membership === 'regular' && (
+                      <Badge variant="success" className="ml-2">
+                        R
+                      </Badge>
+                    )}
+                    {r.membership === 'guest' && (
+                      <Badge variant="secondary" className="ml-2">
+                        G
+                      </Badge>
                     )}
                     {idx === 0 && r.gamesPlayed > 0 && (
                       <Badge variant="default" className="ml-2">

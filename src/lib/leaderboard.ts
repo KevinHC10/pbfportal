@@ -1,9 +1,10 @@
 import type {
+  EventLaneAssignmentRow,
   EventPlayerRow,
   FrameRow,
   GameRow,
+  MembershipStatus,
   PlayerRow,
-  SessionLaneAssignmentRow,
 } from '@/types/db';
 
 // ------------------------------------------------------------------
@@ -18,6 +19,7 @@ export interface LeaderboardRow {
   affiliation: string | null;
   handicap: number;
   laneNumber: number | null;
+  isPlaying: boolean;
   gamesPlayed: number;
   scratchSeries: number;
   handicapSeries: number;
@@ -57,6 +59,7 @@ export function buildLeaderboard(
       affiliation: ep.player.affiliation ?? null,
       handicap: ep.handicap,
       laneNumber: ep.lane_number ?? null,
+      isPlaying: ep.is_playing ?? true,
       gamesPlayed: scores.length,
       scratchSeries,
       handicapSeries,
@@ -113,9 +116,12 @@ export interface SessionLeaderboardRow {
   playerSlug: string;
   playerName: string;
   affiliation: string | null;
-  average: number | null;     // running average across the whole event so far
-  handicap: number;            // stored event_players.handicap
+  /** running average across this event's games so far (or home_average fallback) */
+  average: number | null;
+  handicap: number;
   laneNumber: number | null;
+  isPlaying: boolean;
+  membership: MembershipStatus | null;
   gameScores: Array<{ gameNumber: number; score: number | null; isComplete: boolean; gameId: string }>;
   gamesPlayed: number;
   totalScratch: number;
@@ -128,16 +134,19 @@ export function buildSessionLeaderboard({
   sessionGames,
   totalGames,
   laneAssignments = [],
+  membershipByPlayerId,
 }: {
   eventPlayers: Array<EventPlayerRow & { player: PlayerRow }>;
-  /** every game across every session in the event — used for the Avg column */
+  /** every game in the event — used for the Avg column */
   allEventGames: GameRow[];
-  /** games scoped to the current session */
+  /** games scoped to the current event (same shape as allEventGames now) */
   sessionGames: GameRow[];
-  /** total games per session for this event */
+  /** total games per event */
   totalGames: number;
-  /** per-session lane overrides; fall back to event_players.lane_number */
-  laneAssignments?: SessionLaneAssignmentRow[];
+  /** per-event lane overrides; fall back to event_players.lane_number */
+  laneAssignments?: EventLaneAssignmentRow[];
+  /** player_id → R/G for the league + season this event belongs to */
+  membershipByPlayerId?: Map<string, MembershipStatus>;
 }): SessionLeaderboardRow[] {
   const laneByEp = new Map<string, number | null>();
   for (const la of laneAssignments) {
@@ -198,6 +207,8 @@ export function buildSessionLeaderboard({
       average: runningAverage ?? null,
       handicap: ep.handicap,
       laneNumber: lane,
+      isPlaying: ep.is_playing ?? true,
+      membership: membershipByPlayerId?.get(ep.player_id) ?? null,
       gameScores,
       gamesPlayed,
       totalScratch,

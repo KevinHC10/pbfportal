@@ -1,47 +1,14 @@
+// Kept under the "sessions" filename for now to minimize import churn.
+// All helpers are event-scoped after v8 (sessions table removed).
 import { supabase } from '@/lib/supabase';
 import { scoreRolls } from '@/lib/scoring';
-import type { FrameRow, GameRow, SessionRow } from '@/types/db';
+import type { FrameRow, GameRow } from '@/types/db';
 
-export async function listSessions(eventId: string): Promise<SessionRow[]> {
-  const { data, error } = await supabase
-    .from('sessions')
-    .select('*')
-    .eq('event_id', eventId)
-    .order('session_number', { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as SessionRow[];
-}
-
-export async function getSession(id: string): Promise<SessionRow | null> {
-  const { data, error } = await supabase.from('sessions').select('*').eq('id', id).maybeSingle();
-  if (error) throw error;
-  return data as SessionRow | null;
-}
-
-export async function createSession(
-  eventId: string,
-  sessionNumber: number,
-  sessionDate: string
-): Promise<SessionRow> {
-  const { data, error } = await supabase
-    .from('sessions')
-    .insert({ event_id: eventId, session_number: sessionNumber, session_date: sessionDate })
-    .select()
-    .single();
-  if (error) throw error;
-  return data as SessionRow;
-}
-
-export async function deleteSession(id: string): Promise<void> {
-  const { error } = await supabase.from('sessions').delete().eq('id', id);
-  if (error) throw error;
-}
-
-export async function listGames(sessionId: string): Promise<GameRow[]> {
+export async function listGames(eventId: string): Promise<GameRow[]> {
   const { data, error } = await supabase
     .from('games')
     .select('*')
-    .eq('session_id', sessionId)
+    .eq('event_id', eventId)
     .order('game_number', { ascending: true });
   if (error) throw error;
   return (data ?? []) as GameRow[];
@@ -58,22 +25,34 @@ export async function listFramesForGames(gameIds: string[]): Promise<FrameRow[]>
   return (data ?? []) as FrameRow[];
 }
 
-export async function ensureGamesForSession(
-  sessionId: string,
+/**
+ * Make sure a row exists in `games` for every (event_player, game_number)
+ * combination on this event. Safe to re-call any time the roster or
+ * total_games count changes.
+ */
+export async function ensureGamesForEvent(
+  eventId: string,
   eventPlayerIds: string[],
-  totalGames: number
+  totalGames: number,
+  playedOn: string | null
 ): Promise<GameRow[]> {
-  const existing = await listGames(sessionId);
+  const existing = await listGames(eventId);
   const existingKey = new Set(existing.map((g) => `${g.event_player_id}:${g.game_number}`));
   const toInsert: Array<{
-    session_id: string;
+    event_id: string;
     event_player_id: string;
     game_number: number;
+    played_on: string | null;
   }> = [];
   for (const epId of eventPlayerIds) {
     for (let n = 1; n <= totalGames; n++) {
       if (!existingKey.has(`${epId}:${n}`)) {
-        toInsert.push({ session_id: sessionId, event_player_id: epId, game_number: n });
+        toInsert.push({
+          event_id: eventId,
+          event_player_id: epId,
+          game_number: n,
+          played_on: playedOn,
+        });
       }
     }
   }
@@ -81,7 +60,7 @@ export async function ensureGamesForSession(
     const { error } = await supabase.from('games').insert(toInsert);
     if (error) throw error;
   }
-  return listGames(sessionId);
+  return listGames(eventId);
 }
 
 export async function upsertFrame(
@@ -93,12 +72,7 @@ export async function upsertFrame(
   const { error } = await supabase
     .from('frames')
     .upsert(
-      {
-        game_id: gameId,
-        frame_number: frameNumber,
-        ...rolls,
-        frame_score: frameScore,
-      },
+      { game_id: gameId, frame_number: frameNumber, ...rolls, frame_score: frameScore },
       { onConflict: 'game_id,frame_number' }
     );
   if (error) throw error;
@@ -135,11 +109,6 @@ export async function logScoreEdit(
   });
 }
 
-/**
- * Persist a game's rolls. Re-scores, upserts every frame, updates
- * games.total_score + is_complete, and writes an audit row for any frames
- * whose values actually changed.
- */
 export async function saveGameRolls(
   gameId: string,
   rolls: number[],
@@ -178,15 +147,11 @@ export async function saveGameRolls(
   await updateGameTotals(gameId, scored.total, scored.isComplete);
 }
 
+/**
+ * For backwards-compatible naming the rest of the app uses.
+ * "Event games" used to be "all event games across all sessions" — the
+ * concept collapsed in v8.
+ */
 export async function listAllEventGames(eventId: string): Promise<GameRow[]> {
-  const { data: sessions, error: sErr } = await supabase
-    .from('sessions')
-    .select('id')
-    .eq('event_id', eventId);
-  if (sErr) throw sErr;
-  const ids = (sessions ?? []).map((s) => s.id);
-  if (ids.length === 0) return [];
-  const { data, error } = await supabase.from('games').select('*').in('session_id', ids);
-  if (error) throw error;
-  return (data ?? []) as GameRow[];
+  return listGames(eventId);
 }

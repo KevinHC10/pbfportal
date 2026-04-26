@@ -90,7 +90,7 @@ export type PotGameType = 'singles' | 'doubles';
 
 export interface PotGameRow {
   id: string;
-  session_id: string;
+  event_id: string;
   type: PotGameType;
   name: string;
   game_number: number;
@@ -108,9 +108,9 @@ export interface PotGameEntryRow {
   created_at: string;
 }
 
-export interface SessionLaneAssignmentRow {
+export interface EventLaneAssignmentRow {
   id: string;
-  session_id: string;
+  event_id: string;
   event_player_id: string;
   lane_number: number | null;
   updated_at: string;
@@ -134,22 +134,16 @@ export interface EventPlayerRow {
   player_id: string;
   handicap: number;
   lane_number: number | null;
+  is_playing: boolean;
   entry_date: string;
-}
-
-export interface SessionRow {
-  id: string;
-  event_id: string;
-  session_number: number;
-  session_date: string;
-  created_at: string;
 }
 
 export interface GameRow {
   id: string;
-  session_id: string;
+  event_id: string;
   event_player_id: string;
   game_number: number;
+  played_on: string | null;
   total_score: number | null;
   is_complete: boolean;
   updated_at: string;

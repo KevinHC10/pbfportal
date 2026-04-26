@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase';
 import type { PotGameEntryRow, PotGameRow, PotGameType } from '@/types/db';
 
 export interface PotGameInput {
-  session_id: string;
+  event_id: string;
   type: PotGameType;
   name: string;
   game_number: number;
@@ -11,11 +11,11 @@ export interface PotGameInput {
   hdcp_max?: number;
 }
 
-export async function listPotGames(sessionId: string): Promise<PotGameRow[]> {
+export async function listPotGames(eventId: string): Promise<PotGameRow[]> {
   const { data, error } = await supabase
     .from('pot_games')
     .select('*')
-    .eq('session_id', sessionId)
+    .eq('event_id', eventId)
     .order('created_at', { ascending: true });
   if (error) throw error;
   return (data ?? []) as PotGameRow[];
@@ -29,7 +29,7 @@ export async function createPotGame(input: PotGameInput): Promise<PotGameRow> {
 
 export async function updatePotGame(
   id: string,
-  patch: Partial<Omit<PotGameInput, 'session_id'>>
+  patch: Partial<Omit<PotGameInput, 'event_id'>>
 ): Promise<void> {
   const { error } = await supabase.from('pot_games').update(patch).eq('id', id);
   if (error) throw error;
