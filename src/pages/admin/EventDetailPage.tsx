@@ -47,6 +47,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getEvent } from '@/lib/data/events';
+import { getLeague } from '@/lib/data/leagues';
 import {
   addPlayerToEvent,
   bulkUpdateHandicaps,
@@ -74,6 +75,7 @@ import { computeEventStatus } from '@/lib/event-status';
 import { errorMessage } from '@/lib/utils';
 import { SessionLeaderboard } from '@/components/leaderboard/SessionLeaderboard';
 import { GameEditModal } from '@/components/scoresheet/GameEditModal';
+import { QuickScoresCard } from '@/components/scoresheet/QuickScoresCard';
 import { LaneAssignmentsDialog } from '@/components/session/LaneAssignmentsDialog';
 import { PotGamesSection } from '@/components/pots/PotGamesSection';
 import { useEventRealtime } from '@/hooks/useEventRealtime';
@@ -101,6 +103,12 @@ export function EventDetailPage() {
     queryFn: () => listEventPlayers(eventId!),
     enabled: Boolean(eventId),
   });
+  const { data: league } = useQuery({
+    queryKey: ['league', event?.league_id],
+    queryFn: () => getLeague(event!.league_id!),
+    enabled: Boolean(event?.league_id),
+  });
+  const defaultAffiliation = league?.acronym ?? league?.name ?? '';
 
   // Roster carry-over: find the previous event in the same league + season
   const { data: previousEvent } = useQuery({
@@ -311,6 +319,7 @@ export function EventDetailPage() {
                 </Button>
                 <AddPlayerDialog
                   leagueId={event.league_id ?? null}
+                  defaultAffiliation={defaultAffiliation}
                   suggestible={suggestible}
                   alreadyOnRosterPlayerIds={eventPlayers.map((ep) => ep.player_id)}
                   membershipByPlayerId={membershipByPlayerId}
@@ -372,6 +381,7 @@ export function EventDetailPage() {
                           <TableCell className="font-medium">{ep.player.full_name}</TableCell>
                           <TableCell>
                             <Input
+                              key={`aff-${ep.player_id}-${ep.player.affiliation ?? ''}`}
                               defaultValue={ep.player.affiliation ?? ''}
                               className="h-8"
                               placeholder="(none)"
@@ -401,6 +411,7 @@ export function EventDetailPage() {
                           </TableCell>
                           <TableCell>
                             <Input
+                              key={`hdcp-${ep.id}-${ep.handicap}`}
                               type="number"
                               min={0}
                               max={300}
@@ -418,6 +429,7 @@ export function EventDetailPage() {
                           </TableCell>
                           <TableCell>
                             <Input
+                              key={`lane-${ep.id}-${ep.lane_number ?? 'x'}`}
                               type="number"
                               min={0}
                               max={999}
@@ -452,6 +464,16 @@ export function EventDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {eventPlayers.filter((ep) => ep.is_playing).length > 0 && (
+            <div className="mt-6">
+              <QuickScoresCard
+                event={event}
+                eventPlayers={eventPlayers.filter((ep) => ep.is_playing)}
+                games={games}
+              />
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="scores">
@@ -521,6 +543,7 @@ export function EventDetailPage() {
 
 function AddPlayerDialog({
   leagueId,
+  defaultAffiliation,
   suggestible,
   alreadyOnRosterPlayerIds,
   membershipByPlayerId,
@@ -528,6 +551,7 @@ function AddPlayerDialog({
   onCreated,
 }: {
   leagueId: string | null;
+  defaultAffiliation?: string;
   suggestible: SuggestiblePlayer[];
   alreadyOnRosterPlayerIds: string[];
   membershipByPlayerId?: Map<string, MembershipStatus>;
@@ -563,7 +587,17 @@ function AddPlayerDialog({
     setValue,
     watch,
     formState: { errors, isSubmitting },
-  } = useForm<NewPlayerForm>({ resolver: zodResolver(newPlayerSchema) });
+  } = useForm<NewPlayerForm>({
+    resolver: zodResolver(newPlayerSchema),
+    defaultValues: { affiliation: defaultAffiliation ?? '' },
+  });
+
+  // When the league changes after the dialog has been mounted, keep the
+  // default in sync (otherwise switching events would leave the old default).
+  React.useEffect(() => {
+    reset({ affiliation: defaultAffiliation ?? '' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultAffiliation]);
 
   return (
     <Dialog
