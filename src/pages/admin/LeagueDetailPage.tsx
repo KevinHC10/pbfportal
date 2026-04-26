@@ -59,9 +59,11 @@ import {
 } from '@/lib/data/seasons';
 import { listEventsByLeague } from '@/lib/data/events';
 import { listPlayers } from '@/lib/data/players';
+import { fetchSeasonAttendance } from '@/lib/data/attendance';
 import { formatScheduleLine } from '@/lib/schedule';
 import { computeEventStatus } from '@/lib/event-status';
 import { errorMessage } from '@/lib/utils';
+import { AttendanceGrid } from '@/components/league/AttendanceGrid';
 import type { MembershipStatus, SeasonRow, SeasonStatus } from '@/types/db';
 
 const addMemberSchema = z.object({
@@ -224,6 +226,7 @@ export function LeagueDetailPage() {
           <TabsTrigger value="members">Members</TabsTrigger>
           <TabsTrigger value="seasons">Seasons</TabsTrigger>
           <TabsTrigger value="events">Events</TabsTrigger>
+          <TabsTrigger value="attendance">Attendance</TabsTrigger>
         </TabsList>
 
         <TabsContent value="members">
@@ -504,8 +507,78 @@ export function LeagueDetailPage() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="attendance">
+          <AttendanceTab leagueId={league.id} seasons={seasons} />
+        </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function AttendanceTab({
+  leagueId,
+  seasons,
+}: {
+  leagueId: string;
+  seasons: SeasonRow[];
+}) {
+  const active = seasons.find((s) => s.status === 'active') ?? seasons[0] ?? null;
+  const [seasonId, setSeasonId] = React.useState<string>(active?.id ?? '');
+  React.useEffect(() => {
+    if (!seasonId && active) setSeasonId(active.id);
+  }, [active, seasonId]);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['attendance', leagueId, seasonId || 'none'],
+    queryFn: () => fetchSeasonAttendance(leagueId, seasonId || null),
+    enabled: Boolean(leagueId),
+  });
+
+  if (seasons.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-center text-sm text-muted-foreground">
+          Create a season first to track attendance.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between flex-wrap gap-2">
+        <div>
+          <CardTitle className="text-lg">Attendance</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Who showed up and bowled each week. Counts only events where the bowler
+            was on the roster with Playing checked.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Season</span>
+          <Select value={seasonId} onValueChange={setSeasonId}>
+            <SelectTrigger className="h-8 w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {seasons.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                  {s.status === 'active' ? ' (active)' : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading || !data ? (
+          <Skeleton className="h-40" />
+        ) : (
+          <AttendanceGrid data={data} />
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
