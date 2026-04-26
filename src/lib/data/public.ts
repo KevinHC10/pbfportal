@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import type {
   AssociationRow,
+  EventLaneAssignmentRow,
   EventPlayerRow,
   EventRow,
   FrameRow,
@@ -9,8 +10,6 @@ import type {
   LeagueRow,
   PlayerRow,
   SeasonRow,
-  SessionLaneAssignmentRow,
-  SessionRow,
 } from '@/types/db';
 
 export async function fetchPublicEvent(slug: string): Promise<EventRow | null> {
@@ -34,29 +33,13 @@ export async function fetchPublicEventPlayers(
   return (data ?? []) as Array<EventPlayerRow & { player: PlayerRow }>;
 }
 
-export async function fetchPublicSessions(eventId: string): Promise<SessionRow[]> {
-  const { data, error } = await supabase
-    .from('sessions')
-    .select('*')
-    .eq('event_id', eventId)
-    .order('session_number', { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as SessionRow[];
-}
-
 export async function fetchPublicEventGames(
   eventId: string
 ): Promise<GameRow[]> {
-  const { data: sessions } = await supabase
-    .from('sessions')
-    .select('id')
-    .eq('event_id', eventId);
-  const sessionIds = (sessions ?? []).map((s) => s.id);
-  if (sessionIds.length === 0) return [];
   const { data, error } = await supabase
     .from('games')
     .select('*')
-    .in('session_id', sessionIds);
+    .eq('event_id', eventId);
   if (error) throw error;
   return (data ?? []) as GameRow[];
 }
@@ -212,44 +195,13 @@ export async function fetchPublicPlayerParticipation(
   return (data ?? []) as PlayerEventParticipation[];
 }
 
-export async function fetchPublicSessionLaneAssignments(
-  sessionId: string
-): Promise<SessionLaneAssignmentRow[]> {
+export async function fetchPublicEventLaneAssignments(
+  eventId: string
+): Promise<EventLaneAssignmentRow[]> {
   const { data, error } = await supabase
-    .from('session_lane_assignments')
+    .from('event_lane_assignments')
     .select('*')
-    .eq('session_id', sessionId);
+    .eq('event_id', eventId);
   if (error) throw error;
-  return (data ?? []) as SessionLaneAssignmentRow[];
-}
-
-export async function fetchSessionWithGames(sessionId: string): Promise<{
-  session: SessionRow;
-  games: GameRow[];
-  frames: FrameRow[];
-} | null> {
-  const { data: session, error } = await supabase
-    .from('sessions')
-    .select('*')
-    .eq('id', sessionId)
-    .maybeSingle();
-  if (error) throw error;
-  if (!session) return null;
-  const { data: games, error: gErr } = await supabase
-    .from('games')
-    .select('*')
-    .eq('session_id', sessionId);
-  if (gErr) throw gErr;
-  const ids = (games ?? []).map((g) => g.id);
-  let frames: FrameRow[] = [];
-  if (ids.length > 0) {
-    const { data: frs, error: fErr } = await supabase.from('frames').select('*').in('game_id', ids);
-    if (fErr) throw fErr;
-    frames = (frs ?? []) as FrameRow[];
-  }
-  return {
-    session: session as SessionRow,
-    games: (games ?? []) as GameRow[],
-    frames,
-  };
+  return (data ?? []) as EventLaneAssignmentRow[];
 }

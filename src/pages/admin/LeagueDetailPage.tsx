@@ -61,6 +61,7 @@ import { listEventsByLeague } from '@/lib/data/events';
 import { listPlayers } from '@/lib/data/players';
 import { formatScheduleLine } from '@/lib/schedule';
 import { computeEventStatus } from '@/lib/event-status';
+import { errorMessage } from '@/lib/utils';
 import type { MembershipStatus, SeasonRow, SeasonStatus } from '@/types/db';
 
 const addMemberSchema = z.object({
@@ -115,7 +116,7 @@ export function LeagueDetailPage() {
       qc.invalidateQueries({ queryKey: ['league-memberships', leagueId] });
       toast.success('Member removed');
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
   const patch = useMutation({
@@ -136,7 +137,7 @@ export function LeagueDetailPage() {
       qc.invalidateQueries({ queryKey: ['league-seasons', leagueId] });
       toast.success('Season created');
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
   const patchSeason = useMutation({
@@ -152,7 +153,7 @@ export function LeagueDetailPage() {
       qc.invalidateQueries({ queryKey: ['league-memberships', leagueId] });
       toast.success('Season removed');
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
   if (isLoading || !league) {
@@ -246,7 +247,7 @@ export function LeagueDetailPage() {
                     qc.invalidateQueries({ queryKey: ['league-memberships', league.id] });
                     toast.success('Member added');
                   } catch (e) {
-                    toast.error(e instanceof Error ? e.message : 'Failed');
+                    toast.error(errorMessage(e));
                   }
                 }}
               />

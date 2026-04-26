@@ -30,7 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { cn } from '@/lib/utils';
+import { cn, errorMessage } from '@/lib/utils';
 import {
   buildDoublesPot,
   buildSinglesPot,
@@ -54,14 +54,13 @@ import type {
   PotGameEntryRow,
   PotGameRow,
   PotGameType,
-  SessionRow,
 } from '@/types/db';
 
 interface Props {
   event: EventRow;
-  session: SessionRow;
   eventPlayers: Array<EventPlayerRow & { player: PlayerRow }>;
   allEventGames: GameRow[];
+  /** games played in this event (same shape as allEventGames after v8). */
   sessionGames: GameRow[];
   /** Admin mode enables all editing controls. Public mode is read-only. */
   adminMode: boolean;
@@ -69,7 +68,6 @@ interface Props {
 
 export function PotGamesSection({
   event,
-  session,
   eventPlayers,
   allEventGames,
   sessionGames,
@@ -78,17 +76,17 @@ export function PotGamesSection({
   const qc = useQueryClient();
 
   const { data: pots = [] } = useQuery({
-    queryKey: ['pot-games', session.id],
-    queryFn: () => listPotGames(session.id),
+    queryKey: ['pot-games', event.id],
+    queryFn: () => listPotGames(event.id),
   });
 
   const create = useMutation({
     mutationFn: createPotGame,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['pot-games', session.id] });
+      qc.invalidateQueries({ queryKey: ['pot-games', event.id] });
       toast.success('Pot game created');
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
   if (pots.length === 0 && !adminMode) return null;
@@ -102,7 +100,7 @@ export function PotGamesSection({
             totalGames={event.total_games}
             onCreate={(input) =>
               create.mutate({
-                session_id: session.id,
+                event_id: event.id,
                 ...input,
               })
             }
@@ -160,7 +158,7 @@ function PotGameView({
   const remove = useMutation({
     mutationFn: deletePotGame,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['pot-games', pot.session_id] });
+      qc.invalidateQueries({ queryKey: ['pot-games', pot.event_id] });
       toast.success('Pot removed');
     },
   });
@@ -561,12 +559,12 @@ function ManageEntrantsDialog({
       toast.success('Entrants updated');
       setOpen(false);
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
   const saveSettings = useMutation({
     mutationFn: async (patch: Partial<PotGameRow>) => updatePotGame(pot.id, patch),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['pot-games', pot.session_id] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['pot-games', pot.event_id] }),
   });
 
   const rows = eventPlayers.map((ep) => ({

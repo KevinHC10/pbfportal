@@ -27,3 +27,26 @@ export function generateNamedSlug(name: string, suffixLength = 6): string {
       .slice(0, 40) || 'player';
   return `${base}-${generateSlug(suffixLength)}`;
 }
+
+/**
+ * Pull a useful message out of any thrown value. Supabase's PostgrestError
+ * isn't a native Error, so the common `e instanceof Error ? e.message : 'Failed'`
+ * pattern hides the real cause. This handles Error, PostgrestError-shaped
+ * objects, and bare strings, falling back to JSON for unknown shapes.
+ */
+export function errorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === 'string') return e;
+  if (e && typeof e === 'object') {
+    const o = e as Record<string, unknown>;
+    if (typeof o.message === 'string' && o.message) return o.message;
+    if (typeof o.error_description === 'string') return o.error_description;
+    if (typeof o.details === 'string') return o.details;
+    try {
+      return JSON.stringify(e);
+    } catch {
+      return 'Unknown error';
+    }
+  }
+  return 'Unknown error';
+}

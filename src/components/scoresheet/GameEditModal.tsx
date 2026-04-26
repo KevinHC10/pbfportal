@@ -10,22 +10,21 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { FrameGrid } from '@/components/scoresheet/FrameGrid';
 import { saveGameRolls } from '@/lib/data/sessions';
+import { errorMessage } from '@/lib/utils';
 import type {
   EventPlayerRow,
   EventRow,
   FrameRow,
   GameRow,
   PlayerRow,
-  SessionRow,
 } from '@/types/db';
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   event: EventRow;
-  session: SessionRow;
   eventPlayer: (EventPlayerRow & { player: PlayerRow }) | null;
-  /** Games for this bowler in this session, any order. */
+  /** Games for this bowler in this event, any order. */
   games: GameRow[];
   /** Frames for those games, any order. */
   frames: FrameRow[];
@@ -35,7 +34,6 @@ export function GameEditModal({
   open,
   onOpenChange,
   event,
-  session,
   eventPlayer,
   games,
   frames,
@@ -48,13 +46,12 @@ export function GameEditModal({
       await saveGameRolls(gameId, rolls, gameFrames);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['session-games', session.id] });
-      qc.invalidateQueries({ queryKey: ['session-frames', session.id] });
-      qc.invalidateQueries({ queryKey: ['event-all-games', event.id] });
+      qc.invalidateQueries({ queryKey: ['event-games', event.id] });
+      qc.invalidateQueries({ queryKey: ['event-frames', event.id] });
       qc.invalidateQueries({ queryKey: ['public-event-games', event.id] });
       qc.invalidateQueries({ queryKey: ['public-event-frames', event.id] });
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Could not save'),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
   if (!eventPlayer) return null;
@@ -88,7 +85,7 @@ export function GameEditModal({
             <div>
               <DialogTitle>{eventPlayer.player.full_name}</DialogTitle>
               <DialogDescription className="mt-1 flex flex-wrap items-center gap-2">
-                <span>Session {session.session_number}</span>
+                <span>{event.name}</span>
                 {eventPlayer.player.affiliation && (
                   <Badge variant="outline">{eventPlayer.player.affiliation}</Badge>
                 )}

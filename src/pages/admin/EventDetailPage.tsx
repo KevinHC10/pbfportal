@@ -7,17 +7,16 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import {
   ChevronLeft,
+  Copy,
+  ExternalLink,
   Pencil,
   Plus,
-  Trash2,
-  ExternalLink,
-  UserPlus,
-  Calendar,
   Sigma,
+  Trash2,
 } from 'lucide-react';
 import * as React from 'react';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
@@ -53,27 +52,40 @@ import {
   bulkUpdateHandicaps,
   createPlayer,
   listEventPlayers,
-  listPlayers,
   removePlayerFromEvent,
   updateEventPlayer,
   updatePlayer,
 } from '@/lib/data/players';
-import { createSession, listSessions } from '@/lib/data/sessions';
+import {
+  copyRosterFromEvent,
+  fetchLeagueMembershipMap,
+  fetchSuggestiblePlayers,
+  findPreviousEventInSeason,
+  type SuggestiblePlayer,
+} from '@/lib/data/roster';
+import {
+  ensureGamesForEvent,
+  listFramesForGames,
+  listGames,
+} from '@/lib/data/sessions';
+import { listEventLaneAssignments } from '@/lib/data/lanes';
 import { computeHandicap } from '@/lib/handicap';
 import { computeEventStatus } from '@/lib/event-status';
+import { errorMessage } from '@/lib/utils';
+import { SessionLeaderboard } from '@/components/leaderboard/SessionLeaderboard';
+import { GameEditModal } from '@/components/scoresheet/GameEditModal';
+import { LaneAssignmentsDialog } from '@/components/session/LaneAssignmentsDialog';
+import { PotGamesSection } from '@/components/pots/PotGamesSection';
+import { useEventRealtime } from '@/hooks/useEventRealtime';
+import type { Handedness, MembershipStatus } from '@/types/db';
 
-const playerSchema = z.object({
-  full_name: z.string().min(2, 'Name is required').max(120),
+const newPlayerSchema = z.object({
+  full_name: z.string().min(2).max(120),
   affiliation: z.string().max(80).optional().or(z.literal('')),
   handedness: z.enum(['left', 'right', 'ambi']).optional(),
   home_average: z.coerce.number().min(0).max(300).optional().or(z.literal('')),
 });
-type PlayerForm = z.infer<typeof playerSchema>;
-
-const sessionSchema = z.object({
-  session_date: z.string().min(1, 'Session date is required'),
-});
-type SessionForm = z.infer<typeof sessionSchema>;
+type NewPlayerForm = z.infer<typeof newPlayerSchema>;
 
 export function EventDetailPage() {
   const { eventId } = useParams();
@@ -89,33 +101,65 @@ export function EventDetailPage() {
     queryFn: () => listEventPlayers(eventId!),
     enabled: Boolean(eventId),
   });
-  const { data: sessions = [] } = useQuery({
-    queryKey: ['sessions', eventId],
-    queryFn: () => listSessions(eventId!),
+
+  // Roster carry-over: find the previous event in the same league + season
+  const { data: previousEvent } = useQuery({
+    queryKey: ['previous-event', event?.league_id, event?.season_id, event?.id],
+    queryFn: () => findPreviousEventInSeason(event!),
+    enabled: Boolean(event && event.league_id),
+  });
+
+  // Membership map for R/G badges on the leaderboard
+  const { data: membershipByPlayerId } = useQuery({
+    queryKey: ['membership-map', event?.league_id, event?.season_id],
+    queryFn: () =>
+      fetchLeagueMembershipMap(event!.league_id!, event!.season_id ?? null),
+    enabled: Boolean(event?.league_id),
+  });
+
+  // Game / frame data for the leaderboard + edit modal
+  const gamesQuery = useQuery({
+    queryKey: ['event-games', eventId, event?.total_games, eventPlayers.length],
+    enabled: Boolean(eventId && event && eventPlayers.length > 0),
+    queryFn: async () =>
+      ensureGamesForEvent(
+        eventId!,
+        eventPlayers.filter((ep) => ep.is_playing).map((ep) => ep.id),
+        event!.total_games,
+        event!.start_date
+      ),
+  });
+  const games = gamesQuery.data ?? [];
+  const framesQuery = useQuery({
+    queryKey: ['event-frames', eventId, games.map((g) => g.id).join(',')],
+    enabled: games.length > 0,
+    queryFn: () => listFramesForGames(games.map((g) => g.id)),
+  });
+  const frames = framesQuery.data ?? [];
+
+  const { data: laneAssignments = [] } = useQuery({
+    queryKey: ['event-lanes', eventId],
+    queryFn: () => listEventLaneAssignments(eventId!),
     enabled: Boolean(eventId),
   });
-  const { data: allPlayers = [] } = useQuery({
-    queryKey: ['players'],
-    queryFn: listPlayers,
+
+  // Suggestible players for the add-member dialog
+  const { data: suggestible = [] } = useQuery({
+    queryKey: ['suggestible-players'],
+    queryFn: fetchSuggestiblePlayers,
   });
 
-  const addExisting = useMutation({
-    mutationFn: async ({ playerId, handicap }: { playerId: string; handicap: number }) =>
-      addPlayerToEvent(eventId!, playerId, handicap),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['event-players', eventId] });
-      toast.success('Player added');
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
-  });
+  useEventRealtime(eventId);
 
-  const removePlayer = useMutation({
+  // ----- mutations -----
+
+  const remove = useMutation({
     mutationFn: removePlayerFromEvent,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['event-players', eventId] });
       toast.success('Player removed');
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
   const patchEventPlayer = useMutation({
@@ -124,33 +168,18 @@ export function EventDetailPage() {
       patch,
     }: {
       id: string;
-      patch: { handicap?: number; lane_number?: number | null };
+      patch: { handicap?: number; lane_number?: number | null; is_playing?: boolean };
     }) => updateEventPlayer(id, patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['event-players', eventId] }),
   });
 
   const patchPlayer = useMutation({
-    mutationFn: ({
-      id,
-      patch,
-    }: {
-      id: string;
-      patch: { affiliation?: string | null };
-    }) => updatePlayer(id, patch),
+    mutationFn: ({ id, patch }: { id: string; patch: { affiliation?: string | null } }) =>
+      updatePlayer(id, patch),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['event-players', eventId] });
-      qc.invalidateQueries({ queryKey: ['players'] });
+      qc.invalidateQueries({ queryKey: ['suggestible-players'] });
     },
-  });
-
-  const createSessionMut = useMutation({
-    mutationFn: ({ date }: { date: string }) =>
-      createSession(eventId!, sessions.length + 1, date),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['sessions', eventId] });
-      toast.success('Session created');
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
   });
 
   const recompute = useMutation({
@@ -175,12 +204,27 @@ export function EventDetailPage() {
       qc.invalidateQueries({ queryKey: ['event-players', eventId] });
       toast.success(`Recomputed handicaps for ${count} bowler${count === 1 ? '' : 's'}`);
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
-  const unregisteredPlayers = allPlayers.filter(
-    (p) => !eventPlayers.some((ep) => ep.player_id === p.id)
-  );
+  const copyRoster = useMutation({
+    mutationFn: async () => {
+      if (!event || !previousEvent) throw new Error('No previous event');
+      return copyRosterFromEvent(previousEvent.id, event.id);
+    },
+    onSuccess: (added) => {
+      qc.invalidateQueries({ queryKey: ['event-players', eventId] });
+      toast.success(
+        added === 0
+          ? 'Already up to date'
+          : `Copied ${added} bowler${added === 1 ? '' : 's'} from ${previousEvent?.name}`
+      );
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+
+  const [editingEpId, setEditingEpId] = React.useState<string | null>(null);
+  const editingEp = editingEpId ? eventPlayers.find((ep) => ep.id === editingEpId) ?? null : null;
 
   if (eventLoading || !event) {
     return (
@@ -192,6 +236,7 @@ export function EventDetailPage() {
   }
 
   const publicUrl = `${window.location.origin}/e/${event.public_slug}`;
+  const derivedStatus = computeEventStatus(event);
 
   return (
     <div className="space-y-6">
@@ -209,16 +254,17 @@ export function EventDetailPage() {
               {event.type}
             </Badge>
             <Badge variant="secondary" className="capitalize">
-              {computeEventStatus(event)}
+              {derivedStatus}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground">
             {event.center_name ? `${event.center_name} · ` : ''}
             {format(new Date(event.start_date), 'MMM d, yyyy')}
+            {event.start_time ? ` ${event.start_time.slice(0, 5)}` : ''}
             {event.end_date ? ` → ${format(new Date(event.end_date), 'MMM d, yyyy')}` : ''}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button asChild variant="outline" size="sm">
             <a href={publicUrl} target="_blank" rel="noreferrer">
               <ExternalLink className="h-4 w-4" /> Public link
@@ -235,7 +281,7 @@ export function EventDetailPage() {
       <Tabs defaultValue="roster">
         <TabsList>
           <TabsTrigger value="roster">Roster</TabsTrigger>
-          <TabsTrigger value="sessions">Sessions</TabsTrigger>
+          <TabsTrigger value="scores">Scores</TabsTrigger>
         </TabsList>
 
         <TabsContent value="roster">
@@ -243,23 +289,47 @@ export function EventDetailPage() {
             <CardHeader className="flex-row items-center justify-between flex-wrap gap-2">
               <CardTitle className="text-lg">Players ({eventPlayers.length})</CardTitle>
               <div className="flex gap-2 flex-wrap">
+                {previousEvent && eventPlayers.length === 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => copyRoster.mutate()}
+                    disabled={copyRoster.isPending}
+                    title={`Copy roster from ${previousEvent.name}`}
+                  >
+                    <Copy className="h-4 w-4" /> Copy from {previousEvent.name}
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => recompute.mutate()}
                   disabled={eventPlayers.length === 0 || recompute.isPending}
-                  title="Apply the handicap formula (base, factor, min, max) to every bowler using their home average"
+                  title="Apply the handicap formula to every bowler using their home average"
                 >
                   <Sigma className="h-4 w-4" /> Recompute handicaps
                 </Button>
-                <AddExistingPlayerDialog
-                  players={unregisteredPlayers}
-                  onAdd={(playerId, handicap) => addExisting.mutate({ playerId, handicap })}
-                />
-                <CreatePlayerDialog
-                  onCreated={(p) => {
-                    addExisting.mutate({ playerId: p.id, handicap: 0 });
-                    qc.invalidateQueries({ queryKey: ['players'] });
+                <AddPlayerDialog
+                  leagueId={event.league_id ?? null}
+                  suggestible={suggestible}
+                  alreadyOnRosterPlayerIds={eventPlayers.map((ep) => ep.player_id)}
+                  membershipByPlayerId={membershipByPlayerId}
+                  onAddExisting={(playerId, handicap) =>
+                    addPlayerToEvent(event.id, playerId, handicap)
+                      .then(() =>
+                        qc.invalidateQueries({ queryKey: ['event-players', event.id] })
+                      )
+                      .then(() => toast.success('Player added'))
+                      .catch((e) => toast.error(errorMessage(e)))
+                  }
+                  onCreated={(player) => {
+                    addPlayerToEvent(event.id, player.id, 0)
+                      .then(() => {
+                        qc.invalidateQueries({ queryKey: ['event-players', event.id] });
+                        qc.invalidateQueries({ queryKey: ['suggestible-players'] });
+                      })
+                      .then(() => toast.success('Player added'))
+                      .catch((e) => toast.error(errorMessage(e)));
                   }}
                 />
               </div>
@@ -271,8 +341,10 @@ export function EventDetailPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-20">Playing</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead>Affiliation</TableHead>
+                      <TableHead className="w-20">Member</TableHead>
                       <TableHead className="w-28">Home avg</TableHead>
                       <TableHead className="w-28">HDCP</TableHead>
                       <TableHead className="w-24">Lane</TableHead>
@@ -280,78 +352,101 @@ export function EventDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {eventPlayers.map((ep) => (
-                      <TableRow key={ep.id}>
-                        <TableCell className="font-medium">{ep.player.full_name}</TableCell>
-                        <TableCell>
-                          <Input
-                            defaultValue={ep.player.affiliation ?? ''}
-                            className="h-8"
-                            placeholder="(none)"
-                            onBlur={(e) => {
-                              const v = e.target.value.trim();
-                              const prev = ep.player.affiliation ?? '';
-                              if (v !== prev) {
-                                patchPlayer.mutate({
-                                  id: ep.player_id,
-                                  patch: { affiliation: v === '' ? null : v },
-                                });
-                              }
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {ep.player.home_average ?? '—'}
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={300}
-                            defaultValue={ep.handicap}
-                            className="h-8 w-24"
-                            onBlur={(e) => {
-                              const v = Number(e.target.value);
-                              if (v !== ep.handicap) {
+                    {eventPlayers.map((ep) => {
+                      const m = membershipByPlayerId?.get(ep.player_id);
+                      return (
+                        <TableRow key={ep.id} className={!ep.is_playing ? 'opacity-50' : ''}>
+                          <TableCell>
+                            <input
+                              type="checkbox"
+                              checked={ep.is_playing}
+                              onChange={(e) =>
                                 patchEventPlayer.mutate({
                                   id: ep.id,
-                                  patch: { handicap: v },
-                                });
+                                  patch: { is_playing: e.target.checked },
+                                })
                               }
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={999}
-                            defaultValue={ep.lane_number ?? ''}
-                            className="h-8 w-20"
-                            onBlur={(e) => {
-                              const raw = e.target.value;
-                              const v = raw === '' ? null : Number(raw);
-                              if (v !== ep.lane_number) {
-                                patchEventPlayer.mutate({
-                                  id: ep.id,
-                                  patch: { lane_number: v },
-                                });
-                              }
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => removePlayer.mutate(ep.id)}
-                            aria-label={`Remove ${ep.player.full_name}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                              className="h-4 w-4"
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium">{ep.player.full_name}</TableCell>
+                          <TableCell>
+                            <Input
+                              defaultValue={ep.player.affiliation ?? ''}
+                              className="h-8"
+                              placeholder="(none)"
+                              onBlur={(e) => {
+                                const v = e.target.value.trim();
+                                const prev = ep.player.affiliation ?? '';
+                                if (v !== prev) {
+                                  patchPlayer.mutate({
+                                    id: ep.player_id,
+                                    patch: { affiliation: v === '' ? null : v },
+                                  });
+                                }
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {m === 'regular' ? (
+                              <Badge variant="success">R</Badge>
+                            ) : m === 'guest' ? (
+                              <Badge variant="secondary">G</Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {ep.player.home_average ?? '—'}
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={300}
+                              defaultValue={ep.handicap}
+                              className="h-8 w-24"
+                              onBlur={(e) => {
+                                const v = Number(e.target.value);
+                                if (v !== ep.handicap)
+                                  patchEventPlayer.mutate({
+                                    id: ep.id,
+                                    patch: { handicap: v },
+                                  });
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={999}
+                              defaultValue={ep.lane_number ?? ''}
+                              className="h-8 w-20"
+                              onBlur={(e) => {
+                                const raw = e.target.value;
+                                const v = raw === '' ? null : Number(raw);
+                                if (v !== ep.lane_number)
+                                  patchEventPlayer.mutate({
+                                    id: ep.id,
+                                    patch: { lane_number: v },
+                                  });
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => remove.mutate(ep.id)}
+                              aria-label={`Remove ${ep.player.full_name}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
@@ -359,267 +454,307 @@ export function EventDetailPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="sessions">
-          <Card>
-            <CardHeader className="flex-row items-center justify-between">
-              <CardTitle className="text-lg">Sessions ({sessions.length})</CardTitle>
-              <CreateSessionDialog
-                onCreate={(date) => createSessionMut.mutate({ date })}
-                defaultDate={format(new Date(), 'yyyy-MM-dd')}
-                disabled={eventPlayers.length === 0}
-              />
-            </CardHeader>
-            <CardContent>
-              {eventPlayers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Add players to the roster before creating a session.
-                </p>
-              ) : sessions.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No sessions yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {sessions.map((s) => (
-                    <Link
-                      key={s.id}
-                      to={`/admin/events/${event.id}/sessions/${s.id}`}
-                      className="flex items-center justify-between rounded-md border p-3 hover:bg-accent transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        <div>
-                          <div className="font-medium">Session {s.session_number}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {format(new Date(s.session_date), 'EEE, MMM d, yyyy')}
-                          </div>
-                        </div>
-                      </div>
-                      <span className="text-sm text-muted-foreground">Enter scores →</span>
-                    </Link>
-                  ))}
-                </div>
+        <TabsContent value="scores">
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {eventPlayers.length > 0 && (
+                <LaneAssignmentsDialog
+                  eventId={event.id}
+                  eventPlayers={eventPlayers.filter((ep) => ep.is_playing)}
+                  assignments={laneAssignments}
+                />
               )}
-            </CardContent>
-          </Card>
+            </div>
+
+            {eventPlayers.length === 0 ? (
+              <Card>
+                <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                  Add players to the roster before entering scores.
+                </CardContent>
+              </Card>
+            ) : gamesQuery.isLoading ? (
+              <Skeleton className="h-64" />
+            ) : (
+              <SessionLeaderboard
+                event={event}
+                eventPlayers={eventPlayers.filter((ep) => ep.is_playing)}
+                allEventGames={games}
+                sessionGames={games}
+                laneAssignments={laneAssignments}
+                membershipByPlayerId={membershipByPlayerId}
+                onRowClick={(id) => setEditingEpId(id)}
+                publicSlug={event.public_slug}
+              />
+            )}
+
+            {eventPlayers.length > 0 && (
+              <PotGamesSection
+                event={event}
+                eventPlayers={eventPlayers.filter((ep) => ep.is_playing)}
+                allEventGames={games}
+                sessionGames={games}
+                adminMode
+              />
+            )}
+          </div>
         </TabsContent>
       </Tabs>
+
+      <GameEditModal
+        open={Boolean(editingEp)}
+        onOpenChange={(o) => {
+          if (!o) setEditingEpId(null);
+        }}
+        event={event}
+        eventPlayer={editingEp}
+        games={games}
+        frames={frames}
+      />
     </div>
   );
+
+  // unused but kept for future analytics
+  void listGames;
 }
 
-function CreatePlayerDialog({ onCreated }: { onCreated: (p: { id: string }) => void }) {
+// ----- Add player dialog with affiliation auto-suggest -----
+
+function AddPlayerDialog({
+  leagueId,
+  suggestible,
+  alreadyOnRosterPlayerIds,
+  membershipByPlayerId,
+  onAddExisting,
+  onCreated,
+}: {
+  leagueId: string | null;
+  suggestible: SuggestiblePlayer[];
+  alreadyOnRosterPlayerIds: string[];
+  membershipByPlayerId?: Map<string, MembershipStatus>;
+  onAddExisting: (playerId: string, handicap: number) => void | Promise<unknown>;
+  onCreated: (p: { id: string }) => void;
+}) {
   const [open, setOpen] = React.useState(false);
+  const [mode, setMode] = React.useState<'existing' | 'new'>('existing');
+  const [search, setSearch] = React.useState('');
+  const [handicap, setHandicap] = React.useState(0);
+
+  const onRosterSet = new Set(alreadyOnRosterPlayerIds);
+  const candidates = suggestible
+    .filter((sp) => !onRosterSet.has(sp.player.id))
+    .filter((sp) =>
+      search.trim() === ''
+        ? true
+        : sp.player.full_name.toLowerCase().includes(search.toLowerCase())
+    )
+    // Members of the current league rise to the top
+    .sort((a, b) => {
+      const aMember = leagueId ? a.memberships.some((m) => m.league_id === leagueId) : false;
+      const bMember = leagueId ? b.memberships.some((m) => m.league_id === leagueId) : false;
+      if (aMember && !bMember) return -1;
+      if (!aMember && bMember) return 1;
+      return a.player.full_name.localeCompare(b.player.full_name);
+    });
+
   const {
     register,
     handleSubmit,
     reset,
-    formState: { errors, isSubmitting },
     setValue,
     watch,
-  } = useForm<PlayerForm>({ resolver: zodResolver(playerSchema) });
-
-  const submit = async (values: PlayerForm) => {
-    try {
-      const p = await createPlayer({
-        full_name: values.full_name,
-        affiliation: values.affiliation ? values.affiliation : null,
-        handedness: values.handedness ?? null,
-        home_average: values.home_average === '' ? null : values.home_average ?? null,
-      });
-      toast.success('Player created');
-      reset();
-      setOpen(false);
-      onCreated(p);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed');
-    }
-  };
+    formState: { errors, isSubmitting },
+  } = useForm<NewPlayerForm>({ resolver: zodResolver(newPlayerSchema) });
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) {
+          setSearch('');
+          setMode('existing');
+          setHandicap(0);
+          reset();
+        }
+      }}
+    >
       <DialogTrigger asChild>
         <Button size="sm">
-          <Plus className="h-4 w-4" /> New player
+          <Plus className="h-4 w-4" /> Add player
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-w-xl w-[95vw]">
         <DialogHeader>
-          <DialogTitle>Create player</DialogTitle>
-          <DialogDescription>Adds the player to the current event too.</DialogDescription>
+          <DialogTitle>Add player</DialogTitle>
+          <DialogDescription>
+            Pick someone you've already added before, or create a new player record.
+          </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit(submit)} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="full_name">Full name</Label>
-            <Input id="full_name" {...register('full_name')} />
-            {errors.full_name && (
-              <p className="text-sm text-destructive">{errors.full_name.message}</p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="affiliation">Affiliation</Label>
+
+        <Tabs value={mode} onValueChange={(v) => setMode(v as 'existing' | 'new')}>
+          <TabsList>
+            <TabsTrigger value="existing">Existing player</TabsTrigger>
+            <TabsTrigger value="new">New player</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="existing" className="space-y-3 pt-3">
             <Input
-              id="affiliation"
-              {...register('affiliation')}
-              placeholder="PBA / DATBI / independent…"
+              placeholder="Search by name…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
             />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Handedness</Label>
-              <Select
-                value={watch('handedness') ?? ''}
-                onValueChange={(v) =>
-                  setValue('handedness', v as PlayerForm['handedness'], { shouldDirty: true })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="(optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="right">Right</SelectItem>
-                  <SelectItem value="left">Left</SelectItem>
-                  <SelectItem value="ambi">Ambi</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="home_average">Home average</Label>
+              <Label>Handicap to apply</Label>
               <Input
-                id="home_average"
                 type="number"
                 min={0}
                 max={300}
-                step={1}
-                {...register('home_average')}
+                value={handicap}
+                onChange={(e) => setHandicap(Number(e.target.value))}
               />
             </div>
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={isSubmitting}>
-              Create
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
+            <div className="max-h-[40vh] overflow-y-auto rounded-md border">
+              {candidates.length === 0 ? (
+                <p className="text-sm text-muted-foreground p-4 text-center">
+                  {suggestible.length === 0
+                    ? 'No players in your address book yet — switch to "New player" to create one.'
+                    : 'No matches.'}
+                </p>
+              ) : (
+                <ul className="divide-y">
+                  {candidates.map((sp) => {
+                    const isLeagueMember = leagueId
+                      ? sp.memberships.some((m) => m.league_id === leagueId)
+                      : false;
+                    const otherLeagues = sp.memberships
+                      .filter((m) => m.league_id !== leagueId)
+                      .map((m) => m.league.acronym ?? m.league.name);
+                    const m = membershipByPlayerId?.get(sp.player.id);
+                    return (
+                      <li
+                        key={sp.player.id}
+                        className="flex items-center justify-between p-3 hover:bg-accent/40"
+                      >
+                        <div>
+                          <div className="font-medium flex items-center gap-2">
+                            {sp.player.full_name}
+                            {m === 'regular' && <Badge variant="success">R</Badge>}
+                            {m === 'guest' && <Badge variant="secondary">G</Badge>}
+                            {isLeagueMember && !m && (
+                              <Badge variant="outline">Member</Badge>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {sp.player.affiliation && (
+                              <span>{sp.player.affiliation}</span>
+                            )}
+                            {otherLeagues.length > 0 && (
+                              <span>
+                                {sp.player.affiliation ? ' · ' : ''}
+                                Also in: {otherLeagues.join(', ')}
+                              </span>
+                            )}
+                            {sp.player.home_average != null && (
+                              <span>
+                                {sp.player.affiliation || otherLeagues.length > 0 ? ' · ' : ''}
+                                avg {sp.player.home_average}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            void onAddExisting(sp.player.id, handicap);
+                            setOpen(false);
+                          }}
+                        >
+                          Add
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </TabsContent>
 
-function AddExistingPlayerDialog({
-  players,
-  onAdd,
-}: {
-  players: Array<{ id: string; full_name: string }>;
-  onAdd: (playerId: string, handicap: number) => void;
-}) {
-  const [open, setOpen] = React.useState(false);
-  const [playerId, setPlayerId] = React.useState<string>('');
-  const [handicap, setHandicap] = React.useState<number>(0);
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="outline" disabled={players.length === 0}>
-          <UserPlus className="h-4 w-4" /> Add existing
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add an existing player</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Player</Label>
-            <Select value={playerId} onValueChange={setPlayerId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Pick a player" />
-              </SelectTrigger>
-              <SelectContent>
-                {players.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.full_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Handicap</Label>
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              value={handicap}
-              onChange={(e) => setHandicap(Number(e.target.value))}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button
-            disabled={!playerId}
-            onClick={() => {
-              onAdd(playerId, handicap);
-              setOpen(false);
-              setPlayerId('');
-              setHandicap(0);
-            }}
-          >
-            Add
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function CreateSessionDialog({
-  onCreate,
-  defaultDate,
-  disabled,
-}: {
-  onCreate: (date: string) => void;
-  defaultDate: string;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = React.useState(false);
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<SessionForm>({
-    resolver: zodResolver(sessionSchema),
-    defaultValues: { session_date: defaultDate },
-  });
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" disabled={disabled}>
-          <Plus className="h-4 w-4" /> New session
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>New session</DialogTitle>
-          <DialogDescription>
-            Creates a session and initializes games for every player.
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          onSubmit={handleSubmit((v) => {
-            onCreate(v.session_date);
-            setOpen(false);
-          })}
-          className="space-y-4"
-        >
-          <div className="space-y-2">
-            <Label htmlFor="session_date">Date</Label>
-            <Input id="session_date" type="date" {...register('session_date')} />
-            {errors.session_date && (
-              <p className="text-sm text-destructive">{errors.session_date.message}</p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button type="submit">Create session</Button>
-          </DialogFooter>
-        </form>
+          <TabsContent value="new" className="space-y-3 pt-3">
+            <form
+              onSubmit={handleSubmit(async (values) => {
+                try {
+                  const p = await createPlayer({
+                    full_name: values.full_name,
+                    affiliation: values.affiliation ? values.affiliation : null,
+                    handedness: (values.handedness ?? null) as Handedness | null,
+                    home_average:
+                      values.home_average === '' ? null : values.home_average ?? null,
+                  });
+                  reset();
+                  setOpen(false);
+                  onCreated(p);
+                } catch (e) {
+                  toast.error(errorMessage(e));
+                }
+              })}
+              className="space-y-4"
+            >
+              <div className="space-y-2">
+                <Label htmlFor="full_name">Full name</Label>
+                <Input id="full_name" {...register('full_name')} />
+                {errors.full_name && (
+                  <p className="text-sm text-destructive">{errors.full_name.message}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="affiliation">Affiliation</Label>
+                <Input
+                  id="affiliation"
+                  {...register('affiliation')}
+                  placeholder="PBA / DATBI / independent…"
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Handedness</Label>
+                  <Select
+                    value={watch('handedness') ?? ''}
+                    onValueChange={(v) =>
+                      setValue('handedness', v as NewPlayerForm['handedness'], {
+                        shouldDirty: true,
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="(optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="right">Right</SelectItem>
+                      <SelectItem value="left">Left</SelectItem>
+                      <SelectItem value="ambi">Ambi</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="home_average">Home average</Label>
+                  <Input
+                    id="home_average"
+                    type="number"
+                    min={0}
+                    max={300}
+                    step={1}
+                    {...register('home_average')}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="submit" disabled={isSubmitting}>
+                  Create + add
+                </Button>
+              </DialogFooter>
+            </form>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

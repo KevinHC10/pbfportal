@@ -21,25 +21,21 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { bulkSetSessionLanes } from '@/lib/data/lanes';
+import { bulkSetEventLanes } from '@/lib/data/lanes';
 import type {
+  EventLaneAssignmentRow,
   EventPlayerRow,
   PlayerRow,
-  SessionLaneAssignmentRow,
 } from '@/types/db';
+import { errorMessage } from '@/lib/utils';
 
 interface Props {
-  sessionId: string;
+  eventId: string;
   eventPlayers: Array<EventPlayerRow & { player: PlayerRow }>;
-  assignments: SessionLaneAssignmentRow[];
+  assignments: EventLaneAssignmentRow[];
 }
 
-/**
- * Admin dialog for setting per-session lane assignments. The form is
- * pre-populated from the current assignments; blank rows fall back to the
- * bowler's default `event_players.lane_number`.
- */
-export function LaneAssignmentsDialog({ sessionId, eventPlayers, assignments }: Props) {
+export function LaneAssignmentsDialog({ eventId, eventPlayers, assignments }: Props) {
   const qc = useQueryClient();
   const [open, setOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<Record<string, string>>({});
@@ -63,14 +59,14 @@ export function LaneAssignmentsDialog({ sessionId, eventPlayers, assignments }: 
           lane_number: raw === '' ? null : Number(raw),
         };
       });
-      await bulkSetSessionLanes(sessionId, payload);
+      await bulkSetEventLanes(eventId, payload);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['session-lanes', sessionId] });
+      qc.invalidateQueries({ queryKey: ['event-lanes', eventId] });
       toast.success('Lane assignments saved');
       setOpen(false);
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
   return (
@@ -84,8 +80,8 @@ export function LaneAssignmentsDialog({ sessionId, eventPlayers, assignments }: 
         <DialogHeader>
           <DialogTitle>Lane assignments</DialogTitle>
           <DialogDescription>
-            Overrides the bowler's default lane just for this session. Leave a
-            field blank to fall back to the roster default.
+            Per-event override of the bowler's default lane. Leave a field
+            blank to fall back to the roster default.
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[50vh] overflow-y-auto rounded-md border">
@@ -94,7 +90,7 @@ export function LaneAssignmentsDialog({ sessionId, eventPlayers, assignments }: 
               <TableRow>
                 <TableHead>Bowler</TableHead>
                 <TableHead className="w-24">Default</TableHead>
-                <TableHead className="w-28">This session</TableHead>
+                <TableHead className="w-28">This event</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

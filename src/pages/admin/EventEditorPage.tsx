@@ -21,6 +21,7 @@ import { createEvent, getEvent, updateEvent } from '@/lib/data/events';
 import { listLeagues } from '@/lib/data/leagues';
 import { listSeasons } from '@/lib/data/seasons';
 import { computeHandicap, DEFAULT_HANDICAP_FORMULA } from '@/lib/handicap';
+import { errorMessage } from '@/lib/utils';
 
 const schema = z.object({
   name: z.string().min(2, 'Name is required').max(120),
@@ -155,7 +156,7 @@ export function EventEditorPage() {
         navigate(`/admin/events/${created.id}`);
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to save event');
+      toast.error(errorMessage(e));
     }
   };
 
