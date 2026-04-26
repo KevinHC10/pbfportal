@@ -10,6 +10,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { FrameGrid } from '@/components/scoresheet/FrameGrid';
 import { saveGameRolls } from '@/lib/data/sessions';
+import { errorMessage } from '@/lib/utils';
 import type {
   EventPlayerRow,
   EventRow,
@@ -54,7 +55,7 @@ export function GameEditModal({
       qc.invalidateQueries({ queryKey: ['public-event-games', event.id] });
       qc.invalidateQueries({ queryKey: ['public-event-frames', event.id] });
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Could not save'),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
   if (!eventPlayer) return null;

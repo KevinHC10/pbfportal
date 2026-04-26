@@ -61,6 +61,7 @@ import {
 import { createSession, listSessions } from '@/lib/data/sessions';
 import { computeHandicap } from '@/lib/handicap';
 import { computeEventStatus } from '@/lib/event-status';
+import { errorMessage } from '@/lib/utils';
 
 const playerSchema = z.object({
   full_name: z.string().min(2, 'Name is required').max(120),
@@ -106,7 +107,7 @@ export function EventDetailPage() {
       qc.invalidateQueries({ queryKey: ['event-players', eventId] });
       toast.success('Player added');
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
   const removePlayer = useMutation({
@@ -115,7 +116,7 @@ export function EventDetailPage() {
       qc.invalidateQueries({ queryKey: ['event-players', eventId] });
       toast.success('Player removed');
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
   const patchEventPlayer = useMutation({
@@ -150,7 +151,7 @@ export function EventDetailPage() {
       qc.invalidateQueries({ queryKey: ['sessions', eventId] });
       toast.success('Session created');
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
   const recompute = useMutation({
@@ -175,7 +176,7 @@ export function EventDetailPage() {
       qc.invalidateQueries({ queryKey: ['event-players', eventId] });
       toast.success(`Recomputed handicaps for ${count} bowler${count === 1 ? '' : 's'}`);
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
   const unregisteredPlayers = allPlayers.filter(
@@ -430,7 +431,7 @@ function CreatePlayerDialog({ onCreated }: { onCreated: (p: { id: string }) => v
       setOpen(false);
       onCreated(p);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed');
+      toast.error(errorMessage(e));
     }
   };
 

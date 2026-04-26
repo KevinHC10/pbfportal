@@ -17,6 +17,7 @@ import {
   listLeaguesByAssociation,
 } from '@/lib/data/associations';
 import { formatScheduleLine } from '@/lib/schedule';
+import { errorMessage } from '@/lib/utils';
 
 export function AssociationDetailPage() {
   const { associationId } = useParams();
@@ -41,7 +42,7 @@ export function AssociationDetailPage() {
       toast.success('Association deleted');
       navigate('/admin/associations');
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
   if (isLoading || !association) {

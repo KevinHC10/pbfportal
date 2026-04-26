@@ -15,6 +15,7 @@ import {
   getAssociation,
   updateAssociation,
 } from '@/lib/data/associations';
+import { errorMessage } from '@/lib/utils';
 
 const schema = z.object({
   name: z.string().min(2).max(120),
@@ -75,7 +76,7 @@ export function AssociationEditorPage() {
         navigate(`/admin/associations/${created.id}`);
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to save');
+      toast.error(errorMessage(e));
     }
   };
 

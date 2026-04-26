@@ -25,6 +25,7 @@ import {
 import { listAssociations } from '@/lib/data/associations';
 import { DAY_NAMES } from '@/lib/schedule';
 import { DEFAULT_HANDICAP_FORMULA, computeHandicap } from '@/lib/handicap';
+import { errorMessage } from '@/lib/utils';
 
 const schema = z.object({
   name: z.string().min(2).max(120),
@@ -134,7 +135,7 @@ export function LeagueEditorPage() {
         navigate(`/admin/leagues/${created.id}`);
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to save league');
+      toast.error(errorMessage(e));
     }
   };
 

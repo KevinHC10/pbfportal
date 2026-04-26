@@ -22,6 +22,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { bulkSetSessionLanes } from '@/lib/data/lanes';
+import { errorMessage } from '@/lib/utils';
 import type {
   EventPlayerRow,
   PlayerRow,
@@ -70,7 +71,7 @@ export function LaneAssignmentsDialog({ sessionId, eventPlayers, assignments }: 
       toast.success('Lane assignments saved');
       setOpen(false);
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
   return (

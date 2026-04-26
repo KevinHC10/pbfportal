@@ -30,7 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { cn } from '@/lib/utils';
+import { cn, errorMessage } from '@/lib/utils';
 import {
   buildDoublesPot,
   buildSinglesPot,
@@ -88,7 +88,7 @@ export function PotGamesSection({
       qc.invalidateQueries({ queryKey: ['pot-games', session.id] });
       toast.success('Pot game created');
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
   if (pots.length === 0 && !adminMode) return null;
@@ -561,7 +561,7 @@ function ManageEntrantsDialog({
       toast.success('Entrants updated');
       setOpen(false);
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
   const saveSettings = useMutation({
