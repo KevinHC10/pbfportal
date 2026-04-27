@@ -7,9 +7,15 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { listLeagues } from '@/lib/data/leagues';
 import { formatScheduleLine } from '@/lib/schedule';
+import { useAuth } from '@/lib/auth';
 
 export function LeaguesDashboard() {
-  const { data = [], isLoading } = useQuery({ queryKey: ['leagues'], queryFn: listLeagues });
+  const { isSuperadmin, managedLeagueIds } = useAuth();
+  const { data: all = [], isLoading } = useQuery({
+    queryKey: ['leagues'],
+    queryFn: listLeagues,
+  });
+  const data = isSuperadmin ? all : all.filter((l) => managedLeagueIds.has(l.id));
 
   return (
     <div className="space-y-6">

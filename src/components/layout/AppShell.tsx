@@ -6,17 +6,20 @@ import {
   LayoutDashboard,
   LogOut,
   Moon,
+  Shield,
+  ShieldCheck,
   Sun,
   Trophy,
   Users,
 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
 
 export function AppShell() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, isSuperadmin, profile } = useAuth();
   const navigate = useNavigate();
 
   return (
@@ -45,9 +48,26 @@ export function AppShell() {
             <ThemeToggle />
             {user && (
               <>
-                <span className="hidden sm:inline text-sm text-muted-foreground">
-                  {user.email}
-                </span>
+                <Link
+                  to="/admin/access"
+                  className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+                  title="View my access"
+                >
+                  {profile && (
+                    <Badge variant={isSuperadmin ? 'default' : 'secondary'}>
+                      {isSuperadmin ? (
+                        <>
+                          <ShieldCheck className="h-3 w-3 mr-1" /> Superadmin
+                        </>
+                      ) : (
+                        <>
+                          <Shield className="h-3 w-3 mr-1" /> Organizer
+                        </>
+                      )}
+                    </Badge>
+                  )}
+                  <span>{profile?.full_name || user.email}</span>
+                </Link>
                 <Button
                   variant="ghost"
                   size="sm"

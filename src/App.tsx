@@ -12,6 +12,7 @@ import { LeagueDetailPage } from '@/pages/admin/LeagueDetailPage';
 import { AssociationsDashboard } from '@/pages/admin/AssociationsDashboard';
 import { AssociationEditorPage } from '@/pages/admin/AssociationEditorPage';
 import { AssociationDetailPage } from '@/pages/admin/AssociationDetailPage';
+import { AccessPage } from '@/pages/admin/AccessPage';
 import { PublicEventPage } from '@/pages/public/PublicEventPage';
 import { PublicPlayerPage } from '@/pages/public/PublicPlayerPage';
 import { PublicPlayerProfilePage } from '@/pages/public/PublicPlayerProfilePage';
@@ -68,6 +69,7 @@ export default function App() {
           element={<AssociationEditorPage />}
         />
         <Route path="/admin/players" element={<PlayersPage />} />
+        <Route path="/admin/access" element={<AccessPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

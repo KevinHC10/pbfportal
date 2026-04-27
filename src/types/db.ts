@@ -119,6 +119,23 @@ export interface EventLaneAssignmentRow {
   updated_at: string;
 }
 
+export type UserRole = 'superadmin' | 'organizer';
+
+export interface UserProfileRow {
+  user_id: string;
+  role: UserRole;
+  full_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeagueAdminRow {
+  league_id: string;
+  user_id: string;
+  granted_by: string | null;
+  granted_at: string;
+}
+
 export interface PlayerRow {
   id: string;
   full_name: string;
