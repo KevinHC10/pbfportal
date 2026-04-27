@@ -290,6 +290,8 @@ export function EventDetailPage() {
         <TabsList>
           <TabsTrigger value="roster">Roster</TabsTrigger>
           <TabsTrigger value="scores">Scores</TabsTrigger>
+          <TabsTrigger value="standings">Standings</TabsTrigger>
+          <TabsTrigger value="pots">Pots</TabsTrigger>
         </TabsList>
 
         <TabsContent value="roster">
@@ -464,21 +466,15 @@ export function EventDetailPage() {
               )}
             </CardContent>
           </Card>
-
-          {eventPlayers.filter((ep) => ep.is_playing).length > 0 && (
-            <div className="mt-6">
-              <QuickScoresCard
-                event={event}
-                eventPlayers={eventPlayers.filter((ep) => ep.is_playing)}
-                games={games}
-              />
-            </div>
-          )}
         </TabsContent>
 
         <TabsContent value="scores">
-          <div className="space-y-6">
-            <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                Sorted by lane so you can move down the bowling center one pair at
+                a time. Click a column toggle to enter scores fast.
+              </p>
               {eventPlayers.length > 0 && (
                 <LaneAssignmentsDialog
                   eventId={event.id}
@@ -487,15 +483,36 @@ export function EventDetailPage() {
                 />
               )}
             </div>
-
-            {eventPlayers.length === 0 ? (
+            {eventPlayers.filter((ep) => ep.is_playing).length === 0 ? (
               <Card>
                 <CardContent className="py-10 text-center text-sm text-muted-foreground">
-                  Add players to the roster before entering scores.
+                  Add players to the roster (and check Playing) before entering scores.
                 </CardContent>
               </Card>
             ) : gamesQuery.isLoading ? (
               <Skeleton className="h-64" />
+            ) : (
+              <QuickScoresCard
+                event={event}
+                eventPlayers={eventPlayers.filter((ep) => ep.is_playing)}
+                games={games}
+                laneAssignments={laneAssignments}
+              />
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="standings">
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Sorted by score. Click any row to open the per-frame editor.
+            </p>
+            {eventPlayers.filter((ep) => ep.is_playing).length === 0 ? (
+              <Card>
+                <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                  No standings yet — add players and enter scores.
+                </CardContent>
+              </Card>
             ) : (
               <SessionLeaderboard
                 event={event}
@@ -508,17 +525,25 @@ export function EventDetailPage() {
                 publicSlug={event.public_slug}
               />
             )}
-
-            {eventPlayers.length > 0 && (
-              <PotGamesSection
-                event={event}
-                eventPlayers={eventPlayers.filter((ep) => ep.is_playing)}
-                allEventGames={games}
-                sessionGames={games}
-                adminMode
-              />
-            )}
           </div>
+        </TabsContent>
+
+        <TabsContent value="pots">
+          {eventPlayers.filter((ep) => ep.is_playing).length === 0 ? (
+            <Card>
+              <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                Add players to the roster before setting up pot games.
+              </CardContent>
+            </Card>
+          ) : (
+            <PotGamesSection
+              event={event}
+              eventPlayers={eventPlayers.filter((ep) => ep.is_playing)}
+              allEventGames={games}
+              sessionGames={games}
+              adminMode
+            />
+          )}
         </TabsContent>
       </Tabs>
 

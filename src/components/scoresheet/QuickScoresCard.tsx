@@ -15,13 +15,21 @@ import {
 } from '@/components/ui/table';
 import { ensureGamesForEvent, updateGameTotals } from '@/lib/data/sessions';
 import { errorMessage, cn } from '@/lib/utils';
-import type { EventPlayerRow, EventRow, GameRow, PlayerRow } from '@/types/db';
+import type {
+  EventLaneAssignmentRow,
+  EventPlayerRow,
+  EventRow,
+  GameRow,
+  PlayerRow,
+} from '@/types/db';
 
 interface Props {
   event: EventRow;
   /** Already filtered to is_playing = true */
   eventPlayers: Array<EventPlayerRow & { player: PlayerRow }>;
   games: GameRow[];
+  /** Per-event lane overrides — falls back to event_players.lane_number */
+  laneAssignments?: EventLaneAssignmentRow[];
 }
 
 /**
@@ -32,10 +40,39 @@ interface Props {
  * still works alongside this — entering frames there will overwrite the
  * total via re-scoring.
  */
-export function QuickScoresCard({ event, eventPlayers, games }: Props) {
+export function QuickScoresCard({ event, eventPlayers, games, laneAssignments }: Props) {
   const qc = useQueryClient();
   const totalGames = event.total_games;
   const [editingGame, setEditingGame] = React.useState<number | null>(null);
+
+  // Sort by effective lane (override → roster default → unassigned at the bottom).
+  const sortedPlayers = React.useMemo(() => {
+    const overrideByEp = new Map<string, number | null>();
+    for (const la of laneAssignments ?? []) overrideByEp.set(la.event_player_id, la.lane_number);
+    function effectiveLane(epId: string, fallback: number | null) {
+      if (overrideByEp.has(epId)) return overrideByEp.get(epId) ?? null;
+      return fallback;
+    }
+    return [...eventPlayers].sort((a, b) => {
+      const la = effectiveLane(a.id, a.lane_number ?? null);
+      const lb = effectiveLane(b.id, b.lane_number ?? null);
+      if (la == null && lb == null) return a.player.full_name.localeCompare(b.player.full_name);
+      if (la == null) return 1;
+      if (lb == null) return -1;
+      if (la !== lb) return la - lb;
+      return a.player.full_name.localeCompare(b.player.full_name);
+    });
+  }, [eventPlayers, laneAssignments]);
+
+  const lanesByEp = React.useMemo(() => {
+    const m = new Map<string, number | null>();
+    const overrideByEp = new Map<string, number | null>();
+    for (const la of laneAssignments ?? []) overrideByEp.set(la.event_player_id, la.lane_number);
+    for (const ep of eventPlayers) {
+      m.set(ep.id, overrideByEp.has(ep.id) ? overrideByEp.get(ep.id) ?? null : ep.lane_number ?? null);
+    }
+    return m;
+  }, [eventPlayers, laneAssignments]);
 
   // Make sure a game row exists for every (player, gameNumber) combo so the
   // grid lines up with the bowlers actually playing.
@@ -161,6 +198,7 @@ export function QuickScoresCard({ event, eventPlayers, games }: Props) {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-14 text-right">Lane</TableHead>
                 <TableHead className="min-w-[160px]">Bowler</TableHead>
                 {Array.from({ length: totalGames }, (_, i) => (
                   <TableHead key={i} className="text-right w-20">
@@ -171,10 +209,21 @@ export function QuickScoresCard({ event, eventPlayers, games }: Props) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {eventPlayers.map((ep, rowIdx) => {
+              {sortedPlayers.map((ep, rowIdx) => {
                 const series = seriesByEp.get(ep.id) ?? 0;
+                const lane = lanesByEp.get(ep.id) ?? null;
+                const prevLane = rowIdx > 0
+                  ? lanesByEp.get(sortedPlayers[rowIdx - 1].id) ?? null
+                  : null;
+                const showLaneDivider = rowIdx > 0 && lane !== prevLane;
                 return (
-                  <TableRow key={ep.id}>
+                  <TableRow
+                    key={ep.id}
+                    className={showLaneDivider ? 'border-t-2' : undefined}
+                  >
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {lane ?? '—'}
+                    </TableCell>
                     <TableCell className="font-medium">{ep.player.full_name}</TableCell>
                     {Array.from({ length: totalGames }, (_, i) => {
                       const gameNumber = i + 1;
@@ -208,7 +257,7 @@ export function QuickScoresCard({ event, eventPlayers, games }: Props) {
                                 if (e.key === 'Enter') {
                                   e.preventDefault();
                                   if (commit(game.id, e.currentTarget.value)) {
-                                    if (rowIdx + 1 < eventPlayers.length) {
+                                    if (rowIdx + 1 < sortedPlayers.length) {
                                       focusRow(gameNumber, rowIdx + 1);
                                     } else {
                                       e.currentTarget.blur();
