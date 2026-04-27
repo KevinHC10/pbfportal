@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
 import {
   ChevronLeft,
   Pencil,
@@ -60,9 +61,15 @@ import {
 import { listEventsByLeague } from '@/lib/data/events';
 import { listPlayers } from '@/lib/data/players';
 import { fetchSeasonAttendance } from '@/lib/data/attendance';
+import {
+  grantLeagueAdmin,
+  listLeagueAdmins,
+  revokeLeagueAdmin,
+} from '@/lib/data/access';
 import { formatScheduleLine } from '@/lib/schedule';
 import { computeEventStatus } from '@/lib/event-status';
 import { errorMessage } from '@/lib/utils';
+import { useAuth } from '@/lib/auth';
 import { AttendanceGrid } from '@/components/league/AttendanceGrid';
 import type { MembershipStatus, SeasonRow, SeasonStatus } from '@/types/db';
 
@@ -227,6 +234,7 @@ export function LeagueDetailPage() {
           <TabsTrigger value="seasons">Seasons</TabsTrigger>
           <TabsTrigger value="events">Events</TabsTrigger>
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
+          <TabsTrigger value="admins">Admins</TabsTrigger>
         </TabsList>
 
         <TabsContent value="members">
@@ -510,8 +518,144 @@ export function LeagueDetailPage() {
         <TabsContent value="attendance">
           <AttendanceTab leagueId={league.id} seasons={seasons} />
         </TabsContent>
+
+        <TabsContent value="admins">
+          <AdminsTab leagueId={league.id} />
+        </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function AdminsTab({ leagueId }: { leagueId: string }) {
+  const qc = useQueryClient();
+  const { user, isSuperadmin } = useAuth();
+  const [email, setEmail] = React.useState('');
+
+  const { data: admins = [], isLoading } = useQuery({
+    queryKey: ['league-admins', leagueId],
+    queryFn: () => listLeagueAdmins(leagueId),
+  });
+
+  const grant = useMutation({
+    mutationFn: (e: string) => grantLeagueAdmin(leagueId, e),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['league-admins', leagueId] });
+      setEmail('');
+      toast.success('Admin added');
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+
+  const revoke = useMutation({
+    mutationFn: (userId: string) => revokeLeagueAdmin(leagueId, userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['league-admins', leagueId] });
+      toast.success('Access removed');
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">Admins</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Anyone listed here can manage this league: add events, edit rosters,
+          enter scores, run pots. Only existing organizers (people who have
+          already signed up at /login) can be added.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <form
+          onSubmit={(ev) => {
+            ev.preventDefault();
+            const trimmed = email.trim();
+            if (!trimmed) return;
+            grant.mutate(trimmed);
+          }}
+          className="flex gap-2 flex-wrap"
+        >
+          <Input
+            type="email"
+            placeholder="organizer@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="max-w-xs"
+          />
+          <Button type="submit" disabled={!email.trim() || grant.isPending}>
+            <Plus className="h-4 w-4" /> Add admin
+          </Button>
+        </form>
+
+        {isLoading ? (
+          <Skeleton className="h-16" />
+        ) : admins.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No admins yet.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Organizer</TableHead>
+                <TableHead className="w-32">Role</TableHead>
+                <TableHead className="w-44">Granted</TableHead>
+                <TableHead className="w-12" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {admins.map((a) => {
+                const isSelf = user?.id === a.user_id;
+                return (
+                  <TableRow key={a.user_id}>
+                    <TableCell className="font-medium">
+                      {a.profile?.full_name || a.user_id.slice(0, 8)}
+                      {isSelf && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          (you)
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={a.profile?.role === 'superadmin' ? 'default' : 'secondary'}>
+                        {a.profile?.role ?? 'organizer'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {format(new Date(a.granted_at), 'MMM d, yyyy')}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        disabled={isSelf && !isSuperadmin}
+                        title={
+                          isSelf && !isSuperadmin
+                            ? "You can't remove your own access"
+                            : 'Revoke access'
+                        }
+                        onClick={() => {
+                          if (
+                            confirm(
+                              isSelf
+                                ? 'Remove your own access to this league?'
+                                : 'Remove this admin?'
+                            )
+                          ) {
+                            revoke.mutate(a.user_id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { listEvents } from '@/lib/data/events';
 import { computeEventStatus } from '@/lib/event-status';
+import { useAuth } from '@/lib/auth';
 import type { EventStatus, EventType } from '@/types/db';
 import * as React from 'react';
 
@@ -23,7 +24,16 @@ export function EventsDashboard() {
   const [statusFilter, setStatusFilter] = React.useState<EventStatus | 'all'>('all');
   const { data, isLoading } = useQuery({ queryKey: ['events'], queryFn: listEvents });
 
+  const { user, isSuperadmin, managedLeagueIds } = useAuth();
   const events = (data ?? []).filter((e) => {
+    // Limit dashboard to events the current user can manage. Superadmin sees
+    // all; an organizer sees events in their leagues plus tournaments they
+    // personally created.
+    if (!isSuperadmin) {
+      const inManagedLeague = e.league_id ? managedLeagueIds.has(e.league_id) : false;
+      const isOwn = user ? e.created_by === user.id : false;
+      if (!inManagedLeague && !isOwn) return false;
+    }
     if (typeFilter !== 'all' && e.type !== typeFilter) return false;
     if (statusFilter !== 'all' && computeEventStatus(e) !== statusFilter) return false;
     return true;
