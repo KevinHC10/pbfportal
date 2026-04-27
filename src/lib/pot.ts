@@ -2,27 +2,33 @@
  * Pot-game handicap math.
  *
  * Pot games (singles and doubles) are side competitions that reuse the
- * session's existing game scores. They apply their own handicap formula that
- * is DIFFERENT from the league/event handicap — the point of the pot is to
- * flatten the field among everyone who bought in.
+ * event's existing game scores. They apply their own handicap formula that
+ * is independent of the league handicap — the point of the pot is usually
+ * to flatten the field among everyone who bought in.
  *
- * Singles:
- *   The highest averaging bowler in the pot has HDCP 0.
- *   Everyone else's HDCP = clamp((top_avg - bowler_avg) * factor, min, max)
+ * Three formula shapes are supported:
  *
- * Doubles:
- *   Admin pairs bowlers (high with low typically). Each entry has a partner.
- *   Each individual's pot HDCP is computed with the singles formula using
- *   the pot's entrant pool as the average basis. Team pot HDCP = sum of
- *   the two partner HDCPs.
+ *   top_anchored      Top averager in the pot gets HDCP 0.
+ *                     HDCP = clamp(floor((top_avg − bowler_avg) × factor), min, max)
+ *
+ *   ceiling_anchored  Admin-set ceiling (e.g. 220). Anyone above it caps at
+ *                     min (usually 0). Below it scales by factor.
+ *                     HDCP = clamp(floor((ceiling − bowler_avg) × factor), min, max)
+ *
+ *   scratch           Everyone bowls clean. HDCP = 0.
  *
  * All functions here are pure.
  */
 
+import type { PotFormulaKind } from '@/types/db';
+
 export interface PotFormula {
+  kind: PotFormulaKind;
   factor: number;
   min: number;
   max: number;
+  /** Only used when kind === 'ceiling_anchored'. */
+  ceiling?: number | null;
 }
 
 export function computePotHandicap(
@@ -30,8 +36,19 @@ export function computePotHandicap(
   topAverage: number,
   bowlerAverage: number | null | undefined
 ): number {
-  if (bowlerAverage == null || !Number.isFinite(bowlerAverage)) return formula.max;
-  const raw = Math.floor((topAverage - bowlerAverage) * formula.factor);
+  if (formula.kind === 'scratch') return 0;
+  if (bowlerAverage == null || !Number.isFinite(bowlerAverage)) {
+    // No baseline established → grant max so the bowler isn't punished.
+    return formula.max;
+  }
+  let raw: number;
+  if (formula.kind === 'ceiling_anchored') {
+    const ceiling = formula.ceiling ?? 220;
+    raw = Math.floor((ceiling - bowlerAverage) * formula.factor);
+  } else {
+    // top_anchored
+    raw = Math.floor((topAverage - bowlerAverage) * formula.factor);
+  }
   return Math.max(formula.min, Math.min(formula.max, raw));
 }
 
@@ -61,7 +78,9 @@ export function buildSinglesPot({
     .filter((v): v is number => typeof v === 'number' && v > 0);
   const top = avgs.length > 0 ? Math.max(...avgs) : 0;
   return entries.map((e) => {
-    const hdcp = top > 0 ? computePotHandicap(formula, top, e.average) : 0;
+    const needsTop = formula.kind === 'top_anchored';
+    const hdcp =
+      needsTop && top === 0 ? 0 : computePotHandicap(formula, top, e.average);
     return {
       eventPlayerId: e.eventPlayerId,
       name: e.name,
@@ -139,7 +158,27 @@ export function suggestDoublesPairs<T extends { eventPlayerId: string; average: 
 }
 
 export const DEFAULT_POT_FORMULA: PotFormula = {
+  kind: 'top_anchored',
   factor: 1.0,
   min: 0,
   max: 100,
+  ceiling: 220,
 };
+
+export const POT_FORMULA_LABELS: Record<PotFormulaKind, string> = {
+  top_anchored: 'Top-anchored',
+  ceiling_anchored: 'Ceiling-anchored',
+  scratch: 'Scratch (no HDCP)',
+};
+
+export function describePotFormula(formula: PotFormula): string {
+  switch (formula.kind) {
+    case 'scratch':
+      return 'Scratch — no handicap applied.';
+    case 'ceiling_anchored':
+      return `floor((${formula.ceiling ?? 220} − avg) × ${formula.factor}), clamped to [${formula.min}, ${formula.max}].`;
+    case 'top_anchored':
+    default:
+      return `Top averager = HDCP 0. Others: floor((top − avg) × ${formula.factor}), clamped to [${formula.min}, ${formula.max}].`;
+  }
+}

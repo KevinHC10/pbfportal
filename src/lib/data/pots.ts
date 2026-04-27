@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import type { PotGameEntryRow, PotGameRow, PotGameType } from '@/types/db';
+import type { PotFormulaKind, PotGameEntryRow, PotGameRow, PotGameType } from '@/types/db';
 
 export interface PotGameInput {
   event_id: string;
@@ -9,6 +9,8 @@ export interface PotGameInput {
   factor?: number;
   hdcp_min?: number;
   hdcp_max?: number;
+  formula?: PotFormulaKind;
+  ceiling?: number | null;
 }
 
 export async function listPotGames(eventId: string): Promise<PotGameRow[]> {

@@ -34,6 +34,8 @@ import { cn, errorMessage } from '@/lib/utils';
 import {
   buildDoublesPot,
   buildSinglesPot,
+  describePotFormula,
+  POT_FORMULA_LABELS,
   suggestDoublesPairs,
   type PotFormula,
   type SinglesPotRow,
@@ -51,6 +53,7 @@ import type {
   EventRow,
   GameRow,
   PlayerRow,
+  PotFormulaKind,
   PotGameEntryRow,
   PotGameRow,
   PotGameType,
@@ -164,9 +167,11 @@ function PotGameView({
   });
 
   const formula: PotFormula = {
+    kind: pot.formula,
     factor: Number(pot.factor),
     min: pot.hdcp_min,
     max: pot.hdcp_max,
+    ceiling: pot.ceiling ?? null,
   };
 
   // running averages per event player
@@ -241,12 +246,16 @@ function PotGameView({
               )}
             </Badge>
             <Badge variant="outline">Game {pot.game_number}</Badge>
-            <Badge variant="outline">factor {pot.factor}</Badge>
+            <Badge variant="outline">{POT_FORMULA_LABELS[pot.formula]}</Badge>
+            {pot.formula !== 'scratch' && (
+              <Badge variant="outline">factor {pot.factor}</Badge>
+            )}
+            {pot.formula === 'ceiling_anchored' && pot.ceiling != null && (
+              <Badge variant="outline">ceiling {pot.ceiling}</Badge>
+            )}
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Top averager earns HDCP 0; everyone else{' '}
-            <code>floor((top − avg) × {pot.factor})</code> clamped to [{pot.hdcp_min},{' '}
-            {pot.hdcp_max}].
+            {describePotFormula(formula)}
           </p>
         </div>
         {adminMode && (
@@ -397,15 +406,23 @@ function CreatePotDialog({
     factor: number;
     hdcp_min: number;
     hdcp_max: number;
+    formula: PotFormulaKind;
+    ceiling: number | null;
   }) => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const [type, setType] = React.useState<PotGameType>('singles');
   const [name, setName] = React.useState('');
   const [gameNumber, setGameNumber] = React.useState(1);
+  const [formula, setFormula] = React.useState<PotFormulaKind>('top_anchored');
   const [factor, setFactor] = React.useState(1);
   const [min, setMin] = React.useState(0);
   const [max, setMax] = React.useState(100);
+  const [ceiling, setCeiling] = React.useState(220);
+
+  const isScratch = formula === 'scratch';
+  const isCeiling = formula === 'ceiling_anchored';
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -441,7 +458,35 @@ function CreatePotDialog({
               />
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-4">
+
+          <div className="space-y-1">
+            <Label>Handicap formula</Label>
+            <Select
+              value={formula}
+              onValueChange={(v) => setFormula(v as PotFormulaKind)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="top_anchored">
+                  Top-anchored (top averager = HDCP 0)
+                </SelectItem>
+                <SelectItem value="ceiling_anchored">
+                  Ceiling-anchored (HDCP from a fixed score)
+                </SelectItem>
+                <SelectItem value="scratch">Scratch (no handicap)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div
+            className={
+              isCeiling
+                ? 'grid gap-3 sm:grid-cols-5'
+                : 'grid gap-3 sm:grid-cols-4'
+            }
+          >
             <div className="space-y-1">
               <Label>Game #</Label>
               <Input
@@ -452,6 +497,18 @@ function CreatePotDialog({
                 onChange={(e) => setGameNumber(Number(e.target.value))}
               />
             </div>
+            {isCeiling && (
+              <div className="space-y-1">
+                <Label>Ceiling</Label>
+                <Input
+                  type="number"
+                  min={100}
+                  max={300}
+                  value={ceiling}
+                  onChange={(e) => setCeiling(Number(e.target.value))}
+                />
+              </div>
+            )}
             <div className="space-y-1">
               <Label>Factor</Label>
               <Input
@@ -459,6 +516,7 @@ function CreatePotDialog({
                 step={0.01}
                 min={0}
                 max={2}
+                disabled={isScratch}
                 value={factor}
                 onChange={(e) => setFactor(Number(e.target.value))}
               />
@@ -469,6 +527,7 @@ function CreatePotDialog({
                 type="number"
                 min={0}
                 max={300}
+                disabled={isScratch}
                 value={min}
                 onChange={(e) => setMin(Number(e.target.value))}
               />
@@ -479,11 +538,18 @@ function CreatePotDialog({
                 type="number"
                 min={0}
                 max={300}
+                disabled={isScratch}
                 value={max}
                 onChange={(e) => setMax(Number(e.target.value))}
               />
             </div>
           </div>
+
+          {isScratch && (
+            <p className="text-xs text-muted-foreground">
+              Scratch pot — every bowler's pot HDCP is 0 regardless of average.
+            </p>
+          )}
         </div>
         <DialogFooter>
           <Button
@@ -496,6 +562,8 @@ function CreatePotDialog({
                 factor,
                 hdcp_min: min,
                 hdcp_max: max,
+                formula,
+                ceiling: formula === 'ceiling_anchored' ? ceiling : null,
               });
               setOpen(false);
               setName('');
@@ -503,6 +571,8 @@ function CreatePotDialog({
               setFactor(1);
               setMin(0);
               setMax(100);
+              setCeiling(220);
+              setFormula('top_anchored');
               setType('singles');
             }}
           >
@@ -702,59 +772,115 @@ function ManageEntrantsDialog({
           </Table>
         </div>
 
-        <div className="rounded-md border p-3 grid gap-3 sm:grid-cols-4 text-xs">
-          <div className="space-y-1">
-            <Label>Factor</Label>
-            <Input
-              type="number"
-              step={0.01}
-              min={0}
-              max={2}
-              defaultValue={Number(pot.factor)}
-              onBlur={(e) => {
-                const v = Number(e.target.value);
-                if (v !== Number(pot.factor)) saveSettings.mutate({ factor: v });
-              }}
-            />
+        <div className="rounded-md border p-3 space-y-3 text-xs">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label>Formula</Label>
+              <Select
+                value={pot.formula}
+                onValueChange={(v) =>
+                  saveSettings.mutate({
+                    formula: v as PotFormulaKind,
+                    // initialize a sensible ceiling when first switching
+                    ceiling:
+                      v === 'ceiling_anchored' ? pot.ceiling ?? 220 : null,
+                  })
+                }
+              >
+                <SelectTrigger className="h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="top_anchored">Top-anchored</SelectItem>
+                  <SelectItem value="ceiling_anchored">Ceiling-anchored</SelectItem>
+                  <SelectItem value="scratch">Scratch</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Game #</Label>
+              <Input
+                key={`gn-${pot.id}-${pot.game_number}`}
+                type="number"
+                min={1}
+                max={20}
+                defaultValue={pot.game_number}
+                onBlur={(e) => {
+                  const v = Number(e.target.value);
+                  if (v !== pot.game_number) saveSettings.mutate({ game_number: v });
+                }}
+              />
+            </div>
           </div>
-          <div className="space-y-1">
-            <Label>Min</Label>
-            <Input
-              type="number"
-              min={0}
-              max={300}
-              defaultValue={pot.hdcp_min}
-              onBlur={(e) => {
-                const v = Number(e.target.value);
-                if (v !== pot.hdcp_min) saveSettings.mutate({ hdcp_min: v });
-              }}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label>Max</Label>
-            <Input
-              type="number"
-              min={0}
-              max={300}
-              defaultValue={pot.hdcp_max}
-              onBlur={(e) => {
-                const v = Number(e.target.value);
-                if (v !== pot.hdcp_max) saveSettings.mutate({ hdcp_max: v });
-              }}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label>Game #</Label>
-            <Input
-              type="number"
-              min={1}
-              max={20}
-              defaultValue={pot.game_number}
-              onBlur={(e) => {
-                const v = Number(e.target.value);
-                if (v !== pot.game_number) saveSettings.mutate({ game_number: v });
-              }}
-            />
+          <div
+            className={
+              pot.formula === 'ceiling_anchored'
+                ? 'grid gap-3 sm:grid-cols-4'
+                : 'grid gap-3 sm:grid-cols-3'
+            }
+          >
+            {pot.formula === 'ceiling_anchored' && (
+              <div className="space-y-1">
+                <Label>Ceiling</Label>
+                <Input
+                  key={`ceil-${pot.id}-${pot.ceiling ?? ''}`}
+                  type="number"
+                  min={100}
+                  max={300}
+                  defaultValue={pot.ceiling ?? 220}
+                  onBlur={(e) => {
+                    const v = Number(e.target.value);
+                    if (v !== (pot.ceiling ?? 220)) saveSettings.mutate({ ceiling: v });
+                  }}
+                />
+              </div>
+            )}
+            <div className="space-y-1">
+              <Label>Factor</Label>
+              <Input
+                key={`fact-${pot.id}-${Number(pot.factor)}`}
+                type="number"
+                step={0.01}
+                min={0}
+                max={2}
+                disabled={pot.formula === 'scratch'}
+                defaultValue={Number(pot.factor)}
+                onBlur={(e) => {
+                  const v = Number(e.target.value);
+                  if (v !== Number(pot.factor)) saveSettings.mutate({ factor: v });
+                }}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Min</Label>
+              <Input
+                key={`min-${pot.id}-${pot.hdcp_min}`}
+                type="number"
+                min={0}
+                max={300}
+                disabled={pot.formula === 'scratch'}
+                defaultValue={pot.hdcp_min}
+                onBlur={(e) => {
+                  const v = Number(e.target.value);
+                  if (v !== pot.hdcp_min) saveSettings.mutate({ hdcp_min: v });
+                }}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Max</Label>
+              <Input
+                key={`max-${pot.id}-${pot.hdcp_max}`}
+                type="number"
+                min={0}
+                max={300}
+                disabled={pot.formula === 'scratch'}
+                defaultValue={pot.hdcp_max}
+                onBlur={(e) => {
+                  const v = Number(e.target.value);
+                  if (v !== pot.hdcp_max) saveSettings.mutate({ hdcp_max: v });
+                }}
+              />
+            </div>
           </div>
         </div>
 

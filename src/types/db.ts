@@ -87,6 +87,7 @@ export interface LeagueMembershipRow {
 }
 
 export type PotGameType = 'singles' | 'doubles';
+export type PotFormulaKind = 'top_anchored' | 'ceiling_anchored' | 'scratch';
 
 export interface PotGameRow {
   id: string;
@@ -97,6 +98,8 @@ export interface PotGameRow {
   factor: number;
   hdcp_min: number;
   hdcp_max: number;
+  formula: PotFormulaKind;
+  ceiling: number | null;
   created_at: string;
 }
 
